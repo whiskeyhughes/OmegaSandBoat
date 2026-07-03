@@ -188,11 +188,6 @@ CCharEntity::CCharEntity()
         i.statusLower = 0;
     }
 
-    m_copCurrent = 0;
-    m_acpCurrent = 0;
-    m_mkeCurrent = 0;
-    m_asaCurrent = 0;
-
     m_PMonstrosity = nullptr;
 
     m_Costume            = 0;
@@ -202,7 +197,6 @@ CCharEntity::CCharEntity()
     m_weaknessLvl        = 0;
     m_hasArise           = false;
     m_LevelRestriction   = 0;
-    m_lastBcnmTimePrompt = 0;
     servmesLastOffset_   = std::nullopt;
     m_AHHistoryTimestamp = timer::time_point::min();
     m_DeathTimestamp     = timer::time_point::min();
@@ -214,8 +208,6 @@ CCharEntity::CCharEntity()
     MeritMode    = false;
     PMeritPoints = nullptr;
     PJobPoints   = nullptr;
-
-    PGuildShop = nullptr;
 
     m_isStyleLocked = false;
     m_isBlockingAid = false;
@@ -380,8 +372,6 @@ CCharEntity::~CCharEntity()
     destroy(Container);
     destroy(UContainer);
     destroy(PLatentEffectContainer);
-
-    PGuildShop = nullptr;
 
     destroy(eventPreparation);
     destroy(currentEvent);
