@@ -2515,14 +2515,17 @@ uint8 GetHitRateEx(CBattleEntity* PAttacker, CBattleEntity* PDefender, uint8 att
     }
     return static_cast<uint8>(hitrate);
 }
+
 uint8 GetHitRate(CBattleEntity* PAttacker, CBattleEntity* PDefender)
 {
     return GetHitRateEx(PAttacker, PDefender, 0, 0); // assume attack 0(main)
 }
+
 uint8 GetHitRate(CBattleEntity* PAttacker, CBattleEntity* PDefender, uint8 attackNumber)
 {
     return GetHitRateEx(PAttacker, PDefender, attackNumber, 0);
 }
+
 uint8 GetHitRate(CBattleEntity* PAttacker, CBattleEntity* PDefender, uint8 attackNumber, int16 offsetAccuracy)
 {
     return GetHitRateEx(PAttacker, PDefender, attackNumber, offsetAccuracy);
@@ -3930,6 +3933,7 @@ void handleSecondaryTargetEnmity(CBattleEntity* PAttacker, CBattleEntity* PTarge
         }
     }
 }
+
 /************************************************************************
  *                                                                       *
  *  Transfer Enmity (used with ACCOMPLICE & COLLABORATOR ability type)   *
@@ -5011,7 +5015,7 @@ void DrawIn(CBattleEntity* PTarget, const position_t pos, const float offset, co
     // Move the target a little higher, just in case
     nearEntity.y -= 1.0f;
 
-    if (PTarget->status != STATUS_TYPE::CUTSCENE_ONLY)
+    if (PTarget->status != xi::Status::CutsceneOnly)
     {
         // don't draw in dead players for now!
         // see tractor
@@ -5130,7 +5134,7 @@ bool DoRandomDealToEntity(CCharEntity* PChar, CBattleEntity* PTarget)
         if (activeCooldownList.size() > 1)
         {
             // Shuffle active cooldowns and take first (loaded deck)
-            std::shuffle(std::begin(activeCooldownList), std::end(activeCooldownList), xirand::rng());
+            xirand::ShuffleInPlace(activeCooldownList);
             loadedDeckChance = 100;
         }
 
@@ -5162,7 +5166,7 @@ bool DoRandomDealToEntity(CCharEntity* PChar, CBattleEntity* PTarget)
         if (resetCandidateList.size() > 1)
         {
             // Shuffle if more than 1 ability
-            std::shuffle(std::begin(resetCandidateList), std::end(resetCandidateList), xirand::rng());
+            xirand::ShuffleInPlace(resetCandidateList);
         }
 
         // Reset first ability (shuffled or only)
@@ -6277,4 +6281,5 @@ void addEcosystemKillerEffects(CBattleEntity* PBattleEntity)
             break;
     }
 }
+
 }; // namespace battleutils

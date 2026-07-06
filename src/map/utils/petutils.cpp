@@ -233,6 +233,7 @@ uint16 GetJugWeaponDamage(CPetEntity* PPet)
     float MainLevel = PPet->GetMLevel();
     return (uint16)(MainLevel * (MainLevel < 40 ? 1.4 - MainLevel / 100 : 1));
 }
+
 uint16 GetJugBase(CPetEntity* PMob, uint8 rank)
 {
     uint8 lvl = PMob->GetMLevel();
@@ -278,6 +279,7 @@ uint16 GetJugBase(CPetEntity* PMob, uint8 rank)
     }
     return 0;
 }
+
 uint16 GetBaseToRank(uint8 rank, uint16 lvl)
 {
     switch (rank)
@@ -1442,7 +1444,7 @@ void DetachPet(CBattleEntity* PMaster)
         }
 
         PMob->isCharmed  = false;
-        PMob->allegiance = ALLEGIANCE_TYPE::MOB;
+        PMob->allegiance = xi::Allegiance::Mob;
         PMob->charmTime  = timer::time_point::min();
         PMob->PMaster    = nullptr;
 
@@ -1936,7 +1938,7 @@ void LoadPet(CBattleEntity* PMaster, uint32 PetID, bool spawningFromZone)
     }
 
     PPet->setSpawnLevel(PPet->GetMLevel());
-    PPet->status          = STATUS_TYPE::NORMAL;
+    PPet->status          = xi::Status::Normal;
     PPet->modelSize       = PPetData->modelSize;
     PPet->modelHitboxSize = PPetData->modelHitboxSize;
     PPet->m_EcoSystem     = PPetData->EcoSystem;
