@@ -1,6 +1,9 @@
 -----------------------------------
 -- Global file for skillchain calculations.
 -----------------------------------
+require('scripts/combat/magic_hit_rate')
+require('scripts/globals/spells/damage_spell')
+-----------------------------------
 xi = xi or {}
 xi.combat = xi.combat or {}
 xi.combat.skillchain = xi.combat.skillchain or {}
@@ -37,7 +40,7 @@ local function getSkillchainElementToUse(target, skillchainType)
     -- Build skillchain available elements table.
     local elementTable = {}
     for i = xi.element.FIRE, xi.element.DARK do
-        if xi.data.element.skillchainElementTable[i][skillchainType + 1] > 0 then
+        if xi.data.element.skillchainElementTable[i][skillchainType] > 0 then
             table.insert(elementTable, #elementTable + 1, i)
         end
     end
