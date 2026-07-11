@@ -61,7 +61,6 @@ era/lua/quests/
 era/lua/zones/
 era/sql/attachments.sql
 era/sql/automaton.sql
-custom/cpp/ah_announcement.cpp
 custom/cpp/ah_pagination.cpp
 custom/lua/claim_shield.lua
 custom/lua/mazurka_generates_enmity.lua
@@ -73,3 +72,4 @@ phoenix/sql/pxi_mob_groups.sql
 phoenix/sql/pxi_mob_spawn_points.sql
 omega/sql/restore_homepoint_crystals.sql
 omega/lua/fixed_exp_curve.lua
+omega/cpp/ah_announcement.cpp
