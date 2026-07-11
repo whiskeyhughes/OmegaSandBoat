@@ -73,3 +73,4 @@ phoenix/sql/pxi_mob_spawn_points.sql
 omega/sql/restore_homepoint_crystals.sql
 omega/lua/fixed_exp_curve.lua
 omega/cpp/ah_announcement.cpp
+omega/lua/gov_flat_rewards.lua
