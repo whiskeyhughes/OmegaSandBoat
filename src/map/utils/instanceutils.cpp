@@ -40,6 +40,7 @@ namespace instanceutils
 {
 
 HashMap<uint16, InstanceData_t>       InstanceData;
+HashMap<uint16, std::string>          InstanceScriptFilenames; // Unconditional, unlike InstanceData - populated for every instance, on every process, by LoadAllInstanceScripts()
 std::queue<std::pair<uint32, uint16>> LoadQueue; // player id, instance id
 detail::LazyLoadState                 lazyLoad;
 
@@ -159,12 +160,13 @@ auto LoadInstances(const std::vector<uint16>& instanceIds) -> void
 auto LoadAllInstanceScripts() -> void
 {
     const auto rset = db::preparedStmt(
-        "SELECT instance_name, instance_zone, zone_settings.name AS zone_name "
+        "SELECT instanceid, instance_name, instance_zone, zone_settings.name AS zone_name "
         "FROM instance_list INNER JOIN zone_settings "
         "ON instance_zone = zone_settings.zoneid");
 
     FOR_DB_MULTIPLE_RESULTS(rset)
     {
+        const auto instanceId       = rset->get<uint16>("instanceid");
         const auto instanceName     = rset->get<std::string>("instance_name");
         const auto instanceZoneName = rset->get<std::string>("zone_name");
 
@@ -173,13 +175,26 @@ auto LoadAllInstanceScripts() -> void
         if (std::filesystem::exists(filename))
         {
             luautils::LoadLuaObjectFromFile(filename, true);
+            InstanceScriptFilenames[instanceId] = filename;
             continue;
         }
 
         // If not, fall back to regular instance path
         filename = fmt::format("./scripts/zones/{}/instances/{}.lua", instanceZoneName, instanceName);
         luautils::LoadLuaObjectFromFile(filename);
+        InstanceScriptFilenames[instanceId] = filename;
     }
+}
+
+auto GetInstanceScriptFilename(uint32 instanceid) -> std::string
+{
+    const auto key = static_cast<uint16>(instanceid);
+    if (auto it = InstanceScriptFilenames.find(key); it != InstanceScriptFilenames.end())
+    {
+        return it->second;
+    }
+
+    return "";
 }
 
 // Initialize instance loading: immediate (load all now) or lazy (load on first access)

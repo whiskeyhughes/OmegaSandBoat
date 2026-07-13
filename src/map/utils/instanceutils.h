@@ -86,6 +86,7 @@ auto Initialize(MapConfig config) -> void;
 auto CheckInstance(Scheduler& scheduler, MapConfig config) -> Task<void>; // Called at the end of every tick by time_server
 auto LoadInstance(uint32 instanceid, CCharEntity* PRequester) -> void;
 auto GetInstanceData(uint32 instanceid) -> InstanceData_t;
+auto GetInstanceScriptFilename(uint32 instanceid) -> std::string;
 auto IsValidInstanceID(uint32 instanceid) -> bool;
 
 }; // namespace instanceutils

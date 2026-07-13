@@ -4789,9 +4789,16 @@ auto GetCachedInstanceScript(uint16 instanceId) -> sol::table
 {
     TracyZoneScoped;
 
-    auto instanceData = instanceutils::GetInstanceData(instanceId);
+    // NOTE: GetInstanceData() is intentionally restricted to whichever
+    // process owns this instance's runtime creation rights - it can't be
+    // used here. GetInstanceScriptFilename() is the unconditional
+    // counterpart, populated on every process by
+    // instanceutils::LoadAllInstanceScripts(), so eligibility checks
+    // (registryRequirements, etc.) work from any entrance regardless of
+    // which process actually owns the instance.
+    auto filename = instanceutils::GetInstanceScriptFilename(instanceId);
 
-    auto instanceScript = GetLuaObjectFromFilename(instanceData.filename);
+    auto instanceScript = GetLuaObjectFromFilename(filename);
     if (!instanceScript.valid())
     {
         ShowError("luautils::GetCachedInstanceScript: Could not retrieve Lua object for instance %d", instanceId);
