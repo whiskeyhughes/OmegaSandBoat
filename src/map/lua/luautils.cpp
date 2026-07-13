@@ -325,7 +325,6 @@ void init(IPP mapIPP, bool isRunningInCI)
     lua.set_function("SelectDailyItem", &luautils::SelectDailyItem);
     lua.set_function("GetContainerFilenamesList", &luautils::GetContainerFilenamesList);
     lua.set_function("GetCachedInstanceScript", &luautils::GetCachedInstanceScript);
-    lua.set_function("IsValidInstanceID", &instanceutils::IsValidInstanceID);
     lua.set_function("GetItemIDByName", &luautils::GetItemIDByName);
     lua.set_function("SendItemToDeliveryBox", &luautils::SendItemToDeliveryBox);
     lua.set_function("SendLuaFuncStringToZone", &luautils::SendLuaFuncStringToZone);

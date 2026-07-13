@@ -140,53 +140,9 @@ auto LoadInstances(const std::vector<uint16>& instanceIds) -> void
 
 } // namespace
 
-// Loads every instance's Lua script on this process, unconditionally -
-// independent of GetInstancesAssignedToThisProcess()/lazyLoad below.
-//
-// This is deliberately separate from LoadInstances() below. Loading a
-// script is just reading code into memory: it has no dependency on live
-// characters or zones, so there's no reason to restrict it to whichever
-// process "owns" that instance. Only the InstanceData registry populated
-// by LoadInstances() is a real ownership claim - it's what lets
-// IsValidInstanceID()/createInstance() actually spin up a live CInstance,
-// and that correctly stays restricted to one process so two processes
-// can't race to create the same instance.
-//
-// Without this, GetCachedInstanceScript() (and therefore Lua-side
-// eligibility checks like registryRequirements) only ever succeed on the
-// one process that owns a given instance - silently breaking entrances
-// that live on a different cluster process than their destination zone.
-auto LoadAllInstanceScripts() -> void
-{
-    const auto rset = db::preparedStmt(
-        "SELECT instance_name, instance_zone, zone_settings.name AS zone_name "
-        "FROM instance_list INNER JOIN zone_settings "
-        "ON instance_zone = zone_settings.zoneid");
-
-    FOR_DB_MULTIPLE_RESULTS(rset)
-    {
-        const auto instanceName     = rset->get<std::string>("instance_name");
-        const auto instanceZoneName = rset->get<std::string>("zone_name");
-
-        // Determine if instance exists at new assault path
-        auto filename = fmt::format("./scripts/assaults/{}/{}.lua", instanceZoneName, instanceName);
-        if (std::filesystem::exists(filename))
-        {
-            luautils::LoadLuaObjectFromFile(filename, true);
-            continue;
-        }
-
-        // If not, fall back to regular instance path
-        filename = fmt::format("./scripts/zones/{}/instances/{}.lua", instanceZoneName, instanceName);
-        luautils::LoadLuaObjectFromFile(filename);
-    }
-}
-
 // Initialize instance loading: immediate (load all now) or lazy (load on first access)
 auto Initialize(MapConfig config) -> void
 {
-    LoadAllInstanceScripts();
-
     const auto instanceIds = GetInstancesAssignedToThisProcess(config.ipp);
 
     if (!config.lazyZones)
@@ -233,26 +189,6 @@ auto CheckInstance(Scheduler& scheduler, MapConfig config) -> Task<void>
 
     auto loader = std::make_unique<CInstanceLoader>(instanceId, PRequester);
     loader->LoadInstance();
-
-    // If this character has no current zone, they were warped directly into
-    // this instance's owning zone from a different cluster process (see
-    // CZoneInstance::IncreaseZoneCounter) rather than arriving through the
-    // normal same-process createInstance()/onEventUpdate flow, and their
-    // zone-in was deferred pending this instance's creation. Complete it now.
-    if (PRequester->loc.zone == nullptr && PRequester->PInstance)
-    {
-        auto* PZone = zoneutils::GetZone(data.instance_zone);
-        if (PZone)
-        {
-            luautils::OnInstanceZoneIn(PRequester, PRequester->PInstance);
-            PZone->CharZoneIn(PRequester);
-        }
-        else
-        {
-            ShowError("instanceutils::CheckInstance: Could not find owning zone %d to complete deferred zone-in for charid %d",
-                      data.instance_zone, PRequester->id);
-        }
-    }
 
     co_return;
 }
