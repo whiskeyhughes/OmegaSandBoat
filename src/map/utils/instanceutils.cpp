@@ -244,7 +244,8 @@ auto CheckInstance(Scheduler& scheduler, MapConfig config) -> Task<void>
         auto* PZone = zoneutils::GetZone(data.instance_zone);
         if (PZone)
         {
-            PZone->CompleteDeferredInstanceZoneIn(PRequester);
+            luautils::OnInstanceZoneIn(PRequester, PRequester->PInstance);
+            PZone->CharZoneIn(PRequester);
         }
         else
         {
