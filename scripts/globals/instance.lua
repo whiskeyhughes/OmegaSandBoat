@@ -326,6 +326,22 @@ local checkEntryReqs = function(player, instanceId)
     end
 end
 
+-- Finds which zone owns a given instanceId by scanning xi.instance.lookup.
+-- Used by the cross-cluster fallback below, which only has an instanceId
+-- to work with (not the destination zone directly) at the point it needs
+-- to warp the player.
+local function getInstanceZoneId(instanceId)
+    for zoneId, entries in pairs(xi.instance.lookup) do
+        for _, entry in ipairs(entries) do
+            if entry[1] == instanceId then
+                return zoneId
+            end
+        end
+    end
+
+    return nil
+end
+
 -- Clear up after possible failed loads
 xi.instance.clearInstance = function(player)
     player:setLocalVar('INSTANCE_REQUESTED', 0)
@@ -410,12 +426,22 @@ xi.instance.onEventUpdate = function(player, csid, option, npc)
     end
 
     if player:getLocalVar('INSTANCE_REQUESTED') == 0 then
-        player:createInstance(instanceId)
+        if IsValidInstanceID(instanceId) then
+            player:createInstance(instanceId)
+        else
+            -- Different cluster process owns this instance's zone - we can't
+            -- create it here. Queue the request; onEventFinish will warp the
+            -- player to the owning zone, whose own zone-in path (see
+            -- CZoneInstance::IncreaseZoneCounter) picks this up on arrival.
+            player:setCharVar('PendingInstanceEntry', instanceId)
+        end
+
         player:setLocalVar('INSTANCE_REQUESTED', 1)
     end
 
     if
         player:getInstance() ~= nil or
+        player:getCharVar('PendingInstanceEntry') == instanceId or
         (player:getLocalVar('INSTANCE_REQUESTED') > 0 and
         player:getLocalVar('INSTANCE_REQUESTED') < 10)
     then
@@ -516,6 +542,34 @@ xi.instance.onEventFinish = function(player, csid, option, npc, instanceInfo)
             end
 
             return true
+        end
+    end
+
+    -- Cross-cluster case: no local instance, but a pending request was
+    -- queued in onEventUpdate because a different process owns it. Confirm
+    -- this is the right csid/option, then warp the party there directly -
+    -- the owning process's zone-in path (CZoneInstance::IncreaseZoneCounter)
+    -- picks up the pending charvar and finishes creating the instance.
+    local pendingInstanceId = player:getCharVar('PendingInstanceEntry')
+    if pendingInstanceId ~= 0 then
+        local destinationZoneId = getInstanceZoneId(pendingInstanceId)
+        local zoneLookup        = destinationZoneId and xi.instance.lookup[destinationZoneId]
+
+        for _, entry in ipairs(zoneLookup or {}) do
+            if entry[1] == pendingInstanceId then
+                local csidEntry, optionEntry = unpack(entry[3])
+
+                if csid == csidEntry and option == optionEntry then
+                    for _, v in ipairs(player:getParty()) do
+                        if v:getZoneID() == player:getZoneID() then
+                            v:setCharVar('PendingInstanceEntry', pendingInstanceId)
+                            v:setPos(0, 0, 0, 0, destinationZoneId)
+                        end
+                    end
+
+                    return true
+                end
+            end
         end
     end
 

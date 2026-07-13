@@ -26,6 +26,7 @@
 #include "lua/luautils.h"
 #include "status_effect_container.h"
 #include "utils/charutils.h"
+#include "utils/instanceutils.h"
 #include "utils/zoneutils.h"
 
 CZoneInstance::CZoneInstance(Scheduler& scheduler, MapConfig config, ZONEID ZoneID, REGION_TYPE RegionID, CONTINENT_TYPE ContinentID, uint8 levelRestriction)
@@ -205,6 +206,28 @@ void CZoneInstance::IncreaseZoneCounter(CCharEntity* PChar)
                 PChar->PInstance = PInstance.get();
             }
         }
+    }
+
+    // Cross-cluster instance entry: the character was warped here directly
+    // (scripts/globals/instance.lua) from a different map process that
+    // doesn't own this instance's data, rather than arriving via the normal
+    // same-process createInstance()/onEventUpdate flow. If so, a pending
+    // instance request will be waiting for us in the PendingInstanceEntry
+    // charvar - this IS the owning process, so pick it up and enqueue
+    // creation now. instanceutils::CheckInstance completes the zone-in
+    // (OnInstanceZoneIn/CharZoneIn) once the instance actually finishes
+    // loading, since that step is asynchronous and may take more than
+    // one tick.
+    if (!PChar->PInstance)
+    {
+        const auto pendingInstanceId = static_cast<uint32>(charutils::GetCharVar(PChar, "PendingInstanceEntry"));
+        if (pendingInstanceId != 0 && instanceutils::IsValidInstanceID(pendingInstanceId))
+        {
+            charutils::SetCharVar(PChar, "PendingInstanceEntry", 0);
+            instanceutils::LoadInstance(pendingInstanceId, PChar);
+        }
+
+        return;
     }
 
     if (PChar->PInstance)
