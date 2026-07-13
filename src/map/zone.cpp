@@ -1082,6 +1082,19 @@ void CZone::createZoneTimers()
         });
 }
 
+void CZone::CompleteDeferredInstanceZoneIn(CCharEntity* PChar)
+{
+    TracyZoneScoped;
+
+    if (!PChar || !PChar->PInstance)
+    {
+        return;
+    }
+
+    luautils::OnInstanceZoneIn(PChar, PChar->PInstance);
+    CharZoneIn(PChar);
+}
+
 void CZone::CharZoneIn(CCharEntity* PChar)
 {
     TracyZoneScoped;

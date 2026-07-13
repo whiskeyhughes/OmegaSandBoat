@@ -646,6 +646,13 @@ public:
 
     void LoadXiMesh();
 
+    // Completes a zone-in that was deferred because a character was warped
+    // in from a different cluster process (see CZoneInstance::IncreaseZoneCounter)
+    // and had to wait for their instance to actually finish loading before
+    // CharZoneIn (protected, below) could run. Called by
+    // instanceutils::CheckInstance once loading completes.
+    void CompleteDeferredInstanceZoneIn(CCharEntity* PChar);
+
 protected:
     void createZoneTimers();
     void CharZoneIn(CCharEntity* PChar);
