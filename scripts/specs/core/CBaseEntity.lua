@@ -3877,6 +3877,16 @@ end
 function CBaseEntity:setUnkillable(unkillable)
 end
 
+---@param enabled boolean
+---@return nil
+function CBaseEntity:setPriorityRender(enabled)
+end
+
+---@nodiscard
+---@return boolean
+function CBaseEntity:getUnkillable()
+end
+
 ---@param untargetable boolean
 ---@return nil
 function CBaseEntity:setUntargetable(untargetable)

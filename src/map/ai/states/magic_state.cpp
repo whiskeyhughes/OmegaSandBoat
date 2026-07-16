@@ -96,6 +96,13 @@ CMagicState::CMagicState(CBattleEntity* PEntity, uint16 targid, SpellID spellid,
     m_castTime = battleutils::CalculateSpellCastTime(m_PEntity, this);
     m_startPos = m_PEntity->loc.p;
 
+    auto targetID = PTarget->id;
+
+    if (m_PEntity->objtype != TYPE_PC && settings::get<bool>("map.HIDE_READIES_TARGET"))
+    {
+        targetID = m_PEntity->id;
+    }
+
     action_t action{
         .actorId    = m_PEntity->id,
         .actiontype = ActionCategory::MagicStart,
@@ -103,7 +110,7 @@ CMagicState::CMagicState(CBattleEntity* PEntity, uint16 targid, SpellID spellid,
         .spellgroup = m_PSpell->getSpellGroup(),
         .targets    = {
             {
-                .actorId = PTarget->id,
+                .actorId = targetID,
                 .results = {
                     {
                         .param     = static_cast<int32_t>(m_PSpell->getID()),
@@ -170,6 +177,14 @@ bool CMagicState::Update(timer::time_point tick)
 
             Complete();
             return false;
+        }
+
+        auto& PSpell = m_PSpell;
+
+        // Bard songs do not get interrupted here
+        if (PSpell && PSpell->getSpellGroup() != SPELLGROUP_SONG && m_PEntity->StatusEffectContainer->HasPreventActionEffect())
+        {
+            m_interrupted = true;
         }
     }
 
@@ -254,13 +269,9 @@ bool CMagicState::Update(timer::time_point tick)
         }
 
         // Slept/stunned/petrified/etc. at the moment of completion: the cast is interrupted.
-        // A prevent-action effect that lands mid-cast does not cancel the cast on retail;
-        // the interrupt is decided here, at the finish, mirroring CMobSkillState.
         if (m_PEntity->StatusEffectContainer->HasPreventActionEffect())
         {
-            m_PEntity->OnCastInterrupted(*this, action, msg, false);
-            Complete();
-            return false;
+            m_interrupted = true;
         }
 
         if (m_interrupted)
