@@ -37,11 +37,11 @@
 #include "utils/battleutils.h"
 #include "utils/charutils.h"
 
-CRangeState::CRangeState(CBattleEntity* PEntity, uint16 targid)
-: CState(PEntity, targid)
+CRangeState::CRangeState(CBattleEntity* PEntity, const EntityId& target)
+: CState(PEntity, target)
 , m_PEntity(PEntity)
 {
-    auto* PTarget = m_PEntity->IsValidTarget(m_targid, TARGET_ENEMY, m_errorMsg);
+    auto* PTarget = m_PEntity->IsValidTarget(target, TARGET_ENEMY, m_errorMsg);
 
     if (!PTarget || this->HasErrorMsg())
     {
@@ -85,12 +85,12 @@ CRangeState::CRangeState(CBattleEntity* PEntity, uint16 targid)
     // Rapid Shot
     if (m_PEntity->objtype == TYPE_PC || m_PEntity->objtype == TYPE_TRUST)
     {
-        CItemWeapon* weapon     = dynamic_cast<CItemWeapon*>(m_PEntity->m_Weapons[SLOT_RANGED]);
-        bool         isThrowing = weapon && weapon->isThrowing();
+        const CItemWeapon* weapon     = dynamic_cast<CItemWeapon*>(m_PEntity->m_Weapons[SLOT_RANGED]);
+        const bool         isThrowing = weapon && weapon->isThrowing();
         // Don't apply Rapid Shot to throwing weapons
         if (!isThrowing)
         {
-            auto chance{ m_PEntity->getMod(Mod::RAPID_SHOT) };
+            auto chance{ m_PEntity->getMod(xi::Mod::RAPID_SHOT) };
 
             if (auto* PChar = dynamic_cast<CCharEntity*>(m_PEntity))
             {
@@ -146,20 +146,20 @@ CRangeState::CRangeState(CBattleEntity* PEntity, uint16 targid)
     m_PEntity->loc.zone->PushPacket(m_PEntity, CHAR_INRANGE_SELF, std::make_unique<GP_SERV_COMMAND_BATTLE2>(action));
 }
 
-void CRangeState::SpendCost()
+void CRangeState::SpendCost() const
 {
 }
 
-bool CRangeState::CanChangeState()
+auto CRangeState::CanChangeState() -> bool
 {
     return false;
 }
 
-bool CRangeState::Update(timer::time_point tick)
+auto CRangeState::Update(const timer::time_point tick) -> bool
 {
     if (m_PEntity && m_PEntity->isAlive() && (tick > GetEntryTime() + m_aimTime && !IsCompleted()))
     {
-        auto* PTarget = m_PEntity->IsValidTarget(m_targid, TARGET_ENEMY, m_errorMsg);
+        auto* PTarget = m_PEntity->IsValidTarget(target(), TARGET_ENEMY, m_errorMsg);
 
         CanUseRangedAttack(PTarget, true);
 
@@ -222,7 +222,7 @@ void CRangeState::Cleanup(timer::time_point tick)
 {
 }
 
-bool CRangeState::CanUseRangedAttack(CBattleEntity* PTarget, bool isEndOfAttack)
+auto CRangeState::CanUseRangedAttack(CBattleEntity* PTarget, const bool isEndOfAttack) -> bool
 {
     if (!PTarget)
     {
@@ -305,7 +305,7 @@ bool CRangeState::CanUseRangedAttack(CBattleEntity* PTarget, bool isEndOfAttack)
     return true;
 }
 
-bool CRangeState::HasMoved()
+auto CRangeState::HasMoved() const -> bool
 {
     if (m_PEntity->objtype != TYPE_PC)
     {
@@ -315,4 +315,24 @@ bool CRangeState::HasMoved()
     float charDistance = distance(m_startPos, m_PEntity->loc.p, true);
 
     return charDistance > 0.3;
+}
+
+auto CRangeState::IsRapidShot() const -> bool
+{
+    return m_rapidShot;
+}
+
+auto CRangeState::IsOutOfRange() const -> bool
+{
+    return m_isOutOfRange;
+}
+
+auto CRangeState::CanFollowPath() -> bool
+{
+    return false;
+}
+
+auto CRangeState::CanInterrupt() -> bool
+{
+    return true;
 }

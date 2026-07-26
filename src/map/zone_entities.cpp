@@ -519,7 +519,7 @@ void CZoneEntities::DecreaseZoneCounter(CCharEntity* PChar)
             PChar->PPet->status = xi::Status::Disappear;
             if (static_cast<CPetEntity*>(PChar->PPet)->getPetType() == PET_TYPE::AVATAR)
             {
-                PChar->setModifier(Mod::AVATAR_PERPETUATION, 0);
+                PChar->setModifier(xi::Mod::AVATAR_PERPETUATION, 0);
             }
         }
 
@@ -847,7 +847,7 @@ void CZoneEntities::tapMobAggro(CCharEntity* PChar, CMobEntity* PCurrentMob)
     bool validAggro = mobCheck > EMobDifficulty::TooWeak || PChar->isSitting() || PCurrentMob->getMobMod(xi::MobMod::AlwaysAggro);
     if (validAggro && PController->CanAggroTarget(PChar))
     {
-        PCurrentMob->PAI->Engage(PChar->targid);
+        PCurrentMob->PAI->Engage(PChar->entityId());
     }
 }
 
@@ -1061,7 +1061,7 @@ void CZoneEntities::SpawnPCs(CCharEntity* PChar)
             continue;
         }
 
-        CBaseEntity* PTarget = PState->GetTarget();
+        CBaseEntity* PTarget = PState->target().resolve();
         if (PTarget && PTarget->objtype == TYPE_PC && PTarget->id != PChar->id)
         {
             scoreBonus[PTarget->id] += CHARACTER_SYNC_DISTANCE_SWAP_THRESHOLD;
@@ -1760,7 +1760,7 @@ auto CZoneEntities::mobAggroCheck(CMobEntity* PMob, timer::time_point tick) -> T
             CMobController* PController = static_cast<CMobController*>(PCurrentMob->PAI->GetController());
             if (PController != nullptr && PController->CanAggroTarget(PMob))
             {
-                PCurrentMob->PAI->Engage(PMob->targid);
+                PCurrentMob->PAI->Engage(PMob->entityId());
             }
         }
     };
