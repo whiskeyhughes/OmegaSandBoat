@@ -211,7 +211,7 @@ CCharStatusPacket::CCharStatusPacket(CCharEntity* PChar)
     std::memcpy(&packet->BufStatusBits, &PChar->StatusEffectContainer->statusBits(), sizeof(status_bits_t));
 
     packet->UniqueNo      = PChar->id;
-    packet->server_status = PChar->animation;
+    packet->server_status = static_cast<uint8_t>(PChar->animation);
 
     CItemLinkshell* linkshell = (CItemLinkshell*)PChar->getEquip(SLOT_LINK1);
 
@@ -234,7 +234,7 @@ CCharStatusPacket::CCharStatusPacket(CCharEntity* PChar)
     packet->model_hitbox_size = static_cast<uint8_t>(PChar->modelHitboxSize * 10);
     packet->mount_id          = 0;
 
-    if (PChar->animation == ANIMATION_FISHING_START)
+    if (PChar->animation == xi::Animation::NewFishingStart)
     {
         packet->fishing_timer = PChar->hookDelay;
     }
@@ -320,7 +320,7 @@ CCharStatusPacket::CCharStatusPacket(CCharEntity* PChar)
     flags4.GeoIndiElement = 0;
     flags4.GeoIndiSize    = 1;
     flags4.GeoIndiFlag    = 0;
-    flags4.JobMasterFlag  = PChar->getMod(Mod::SUPERIOR_LEVEL) == 5 && PChar->m_jobMasterDisplay;
+    flags4.JobMasterFlag  = PChar->getMod(xi::Mod::SUPERIOR_LEVEL) == 5 && PChar->m_jobMasterDisplay;
 
     // GEO bubble effects, changes bubble effect depending on what effect is activated.
     if (PChar->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::ColureActive))

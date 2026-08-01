@@ -24,6 +24,7 @@
 
 #include "common/cbasetypes.h"
 #include "data/enums/entity_flags.h"
+#include "data/enums/mob_mod.h"
 #include "enums/mission_log.h"
 #include "luautils.h"
 #include "packets/s2c/0x009_message.h"
@@ -297,7 +298,7 @@ public:
     int8  getShieldSize();
     int16 getShieldDefense();
 
-    void addGearSetMod(uint8 setId, Mod modId, uint16 modValue);
+    void addGearSetMod(uint8 setId, xi::Mod modId, uint16 modValue);
     void clearGearSetMods();
 
     // Storing
@@ -324,8 +325,8 @@ public:
     void   setCostume(uint16 costume);
     uint16 getCostume2();
     void   setCostume2(uint16 costume);
-    uint8  getAnimation();
-    void   setAnimation(uint8 animation);
+    auto   getAnimation() -> xi::Animation;
+    void   setAnimation(xi::Animation animation);
     uint8  getAnimationSub();
     void   setAnimationSub(uint8 animationsub, const sol::object& sendUpdate);
     void   setSpawnAnimation(xi::SpawnAnimation spawnAnimation);
@@ -373,12 +374,12 @@ public:
     uint32 getTimeCreated();
 
     // Player Jobs and Levels
-    uint8 getMainJob();
-    uint8 getSubJob();
-    void  changeJob(uint8 newJob);
-    void  changesJob(uint8 subJob);
-    void  unlockJob(uint8 JobID);
-    bool  hasJob(uint8 job);
+    auto getMainJob() -> xi::Job;
+    auto getSubJob() -> xi::Job;
+    void changeJob(uint8 newJob);
+    void changesJob(uint8 subJob);
+    void unlockJob(uint8 JobID);
+    bool hasJob(uint8 job);
 
     uint8 getMainLvl();
     uint8 getSubLvl();
@@ -477,7 +478,7 @@ public:
     void   setJobPoints(uint16 amount);
     void   addJobPoints(uint8 jobID, uint16 amount);
     void   delJobPoints(uint8 jobID, uint16 amount);
-    uint16 getJobPoints(JOBTYPE jobID);
+    auto   getJobPoints(xi::Job jobID) -> uint16;
     void   setCapacityPoints(uint16 amount);
     void   masterJob();
 
@@ -720,8 +721,8 @@ public:
     void  setMod(uint16 modID, int16 value);
     void  delMod(uint16 modID, int16 value);
     void  printAllMods();
-    int16 getMaxGearMod(Mod modId);
-    int16 getGearModFromSlot(uint8 slot, Mod modId);
+    int16 getMaxGearMod(xi::Mod modId);
+    int16 getGearModFromSlot(uint8 slot, xi::Mod modId);
 
     void addLatent(uint16 condID, uint16 conditionValue, uint16 mID, int16 modValue);
     auto delLatent(uint16 condID, uint16 conditionValue, uint16 mID, int16 modValue) -> bool;
@@ -905,10 +906,10 @@ public:
     void setMobAbilityEnabled(bool state);   // halt/resumes mob skills
     void setMobSkillAttack(int16 listId);    // enable/disable using mobskills as regular attacks
 
-    int16 getMobMod(uint16 mobModID);
-    void  setMobMod(uint16 mobModID, int16 value);
-    void  addMobMod(uint16 mobModID, int16 value);
-    void  delMobMod(uint16 mobModID, int16 value);
+    int16 getMobMod(xi::MobMod mobModID);
+    void  setMobMod(xi::MobMod mobModID, int16 value);
+    void  addMobMod(xi::MobMod mobModID, int16 value);
+    void  delMobMod(xi::MobMod mobModID, int16 value);
 
     auto getfTPModifierOverride(uint16 skillId) -> sol::object;
     void setfTPModifierOverride(uint16 skillId, float ftp1, float ftp2, float ftp3);
