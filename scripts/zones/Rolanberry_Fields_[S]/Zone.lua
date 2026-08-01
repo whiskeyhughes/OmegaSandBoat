@@ -31,6 +31,13 @@ zoneObject.onTriggerAreaEnter = function(player, triggerArea)
 end
 
 zoneObject.onEventUpdate = function(player, csid, option, npc)
+    if csid == 700 then
+        -- TEMPORARY TEST-ONLY: real captured values from Tairneanach's session,
+        -- Rolanberry Fields [S]. Confirms/denies the missing onEventUpdate
+        -- theory for WOTG mission 2 (Back to the Beginning)'s crash-land scene.
+        -- Remove once confirmed and properly wired into the mission file itself.
+        player:updateEvent(1, 23, 1749, 0, 0, 5439508, 0, 0)
+    end
 end
 
 zoneObject.onEventFinish = function(player, csid, option, npc)
