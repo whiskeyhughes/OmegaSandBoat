@@ -24,7 +24,9 @@
 
 #include "common/cbasetypes.h"
 #include "data/enums/entity_flags.h"
+#include "data/enums/fame_area.h"
 #include "data/enums/mob_mod.h"
+#include "data/enums/music_slot.h"
 #include "enums/mission_log.h"
 #include "luautils.h"
 #include "packets/s2c/0x009_message.h"
@@ -33,7 +35,6 @@
 
 enum class QuestLog : uint8_t;
 enum class POSMODE : uint8;
-enum class MusicSlot : uint16_t;
 enum class ChocoboColor : uint8_t;
 enum class TerrainType : uint8;
 class CBaseEntity;
@@ -162,9 +163,7 @@ public:
     // int32 WarpTo(lua_Stat* L);           // warp to the given point -- These don't exist, breaking them just in case someone uncomments
     // int32 RoamAround(lua_Stat* L);       // pick a random point to walk to
     // int32 LimitDistance(lua_Stat* L);    // limits the current path distance to given max distance
-    void setCarefulPathing(bool careful);
-
-    bool canSee(const CLuaBaseEntity* PTarget);
+    bool canSee(const CLuaBaseEntity* PTarget, const sol::object& ignoreInvisibleBoundaries);
     bool inWater();
 
     void openDoor(const sol::object& seconds);
@@ -180,7 +179,7 @@ public:
     void setWeather(xi::Weather weatherType); // Set Weather condition (GM COMMAND)
 
     // PC Instructions
-    void changeMusic(MusicSlot slotId, uint16 trackId) const;                                                      // Sets the specified music Track for specified music block.
+    void changeMusic(xi::MusicSlot slotId, uint16 trackId) const;                                                  // Sets the specified music Track for specified music block.
     void sendMenu(uint32 menu);                                                                                    // Displays a menu (AH,Raise,Tractor,MH etc)
     auto sendGuild(uint16 guildId, uint8 open, uint8 close, uint8 holiday) const -> bool;                          // Sends guild shop menu
     auto openGuildShop(CLuaBaseEntity* PNpc, uint8 open, uint8 close, sol::optional<uint8> holiday) const -> bool; // Opens a lua guild shop and remembers the NPC the PC opened it with
@@ -201,10 +200,10 @@ public:
     auto  isToEntitysRight(const CLuaBaseEntity* target, const sol::object& angleArg) -> bool; // true if you're to the right side of the input target (from target's perspective)
 
     auto   getZone(const sol::object& arg0) -> CZone*;
-    uint16 getZoneID();
+    auto   getZoneID() -> xi::ZoneId;
     auto   getZoneName() -> std::string;
     bool   hasVisitedZone(uint16 zone);
-    uint16 getPreviousZone();
+    auto   getPreviousZone() -> xi::ZoneId;
     uint32 getPreviousZoneLineID();
     uint8  getCurrentRegion();
     uint8  getContinentID();
@@ -406,10 +405,10 @@ public:
     void   setTitle(uint16 titleID);
     void   delTitle(uint16 titleID);
 
-    uint16 getFame(const sol::object& areaObj);
-    void   addFame(const sol::object& areaObj, uint16 fame);
-    void   setFame(const sol::object& areaObj, uint16 fame);
-    uint8  getFameLevel(const sol::object& areaObj); // Gets Fame Level for specified nation
+    auto getFame(xi::FameArea area) const -> uint16;
+    void addFame(xi::FameArea area, uint16 fame);
+    void setFame(xi::FameArea area, uint16 fame);
+    auto getFameLevel(xi::FameArea area) const -> uint8; // Gets Fame Level for specified nation
 
     uint8  getRank(uint8 nation);
     void   setRank(uint8 rank);

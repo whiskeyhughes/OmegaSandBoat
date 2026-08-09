@@ -28,10 +28,14 @@
 #include "common/vana_time.h"
 #include <fmt/ranges.h>
 
+#include <common/database.h>
 #include <common/types/hash_map.h>
 
 #include <array>
 #include <chrono>
+
+#include "map_constants.h"
+#include "persist_batch.h"
 
 #include "lua/luautils.h"
 
@@ -484,8 +488,8 @@ auto LoadChar(Scheduler& scheduler, MapConfig config, const uint32 charId) -> st
         PChar->targid = 0x400;
         PChar->SetName(rset->get<std::string>("charname").c_str());
 
-        PChar->loc.destination  = rset->get<uint16>("pos_zone");
-        PChar->loc.prevzone     = rset->get<uint16>("pos_prevzone");
+        PChar->loc.destination  = rset->get<xi::ZoneId>("pos_zone");
+        PChar->loc.prevzone     = rset->get<xi::ZoneId>("pos_prevzone");
         PChar->m_PrevZonelineID = rset->get<uint32>("pos_prevzonelineid");
 
         PChar->loc.p.rotation = rset->get<uint8>("pos_rot");
@@ -496,7 +500,7 @@ auto LoadChar(Scheduler& scheduler, MapConfig config, const uint32 charId) -> st
         PChar->loc.boundary   = rset->get<uint16>("boundary");
         PChar->accid          = rset->get<uint32>("accid");
 
-        PChar->profile.home_point.destination = rset->get<uint16>("home_zone");
+        PChar->profile.home_point.destination = rset->get<xi::ZoneId>("home_zone");
         PChar->profile.home_point.p.rotation  = rset->get<uint8>("home_rot");
         PChar->profile.home_point.p.x         = rset->get<float>("home_x");
         PChar->profile.home_point.p.y         = rset->get<float>("home_y");
@@ -547,7 +551,6 @@ auto LoadChar(Scheduler& scheduler, MapConfig config, const uint32 charId) -> st
                "fame_bastok,"
                "fame_windurst,"
                "fame_norg, "
-               "fame_jeuno, "
                "fame_aby_konschtat, "
                "fame_aby_tahrongi, "
                "fame_aby_latheine, "
@@ -571,21 +574,23 @@ auto LoadChar(Scheduler& scheduler, MapConfig config, const uint32 charId) -> st
         PChar->profile.rank[1] = rset->get<uint8>("rank_bastok");
         PChar->profile.rank[2] = rset->get<uint8>("rank_windurst");
 
-        PChar->profile.fame[0]      = rset->get<uint16>("fame_sandoria");
-        PChar->profile.fame[1]      = rset->get<uint16>("fame_bastok");
-        PChar->profile.fame[2]      = rset->get<uint16>("fame_windurst");
-        PChar->profile.fame[3]      = rset->get<uint16>("fame_norg");
-        PChar->profile.fame[4]      = rset->get<uint16>("fame_jeuno");
-        PChar->profile.fame[5]      = rset->get<uint16>("fame_aby_konschtat");
-        PChar->profile.fame[6]      = rset->get<uint16>("fame_aby_tahrongi");
-        PChar->profile.fame[7]      = rset->get<uint16>("fame_aby_latheine");
-        PChar->profile.fame[8]      = rset->get<uint16>("fame_aby_misareaux");
-        PChar->profile.fame[9]      = rset->get<uint16>("fame_aby_vunkerl");
-        PChar->profile.fame[10]     = rset->get<uint16>("fame_aby_attohwa");
-        PChar->profile.fame[11]     = rset->get<uint16>("fame_aby_altepa");
-        PChar->profile.fame[12]     = rset->get<uint16>("fame_aby_grauberg");
-        PChar->profile.fame[13]     = rset->get<uint16>("fame_aby_uleguerand");
-        PChar->profile.fame[14]     = rset->get<uint16>("fame_adoulin");
+        PChar->profile.fame = {
+            .Sandoria          = rset->get<uint16>("fame_sandoria"),
+            .Bastok            = rset->get<uint16>("fame_bastok"),
+            .Windurst          = rset->get<uint16>("fame_windurst"),
+            .Norg              = rset->get<uint16>("fame_norg"),
+            .AbysseaKonschtat  = rset->get<uint16>("fame_aby_konschtat"),
+            .AbysseaTahrongi   = rset->get<uint16>("fame_aby_tahrongi"),
+            .AbysseaLaTheine   = rset->get<uint16>("fame_aby_latheine"),
+            .AbysseaMisareaux  = rset->get<uint16>("fame_aby_misareaux"),
+            .AbysseaVunkerl    = rset->get<uint16>("fame_aby_vunkerl"),
+            .AbysseaAttohwa    = rset->get<uint16>("fame_aby_attohwa"),
+            .AbysseaAltepa     = rset->get<uint16>("fame_aby_altepa"),
+            .AbysseaGrauberg   = rset->get<uint16>("fame_aby_grauberg"),
+            .AbysseaUleguerand = rset->get<uint16>("fame_aby_uleguerand"),
+            .Adoulin           = rset->get<uint16>("fame_adoulin")
+        };
+
         PChar->profile.unity_leader = rset->get<uint8>("unity_leader");
     }
 
@@ -2310,6 +2315,8 @@ void UnequipItem(CCharEntity* PChar, uint8 equipSlotID, Recalculate recalculate)
 
         PChar->inventorySyncState().queueEquipChange(LOC_INVENTORY, 0, static_cast<SLOTTYPE>(equipSlotID), PItem, Equipping::No);
 
+        PChar->setPersist(CharPersist::Equip | CharPersist::Look);
+
         if (recalculate)
         {
             charutils::BuildingCharSkillsTable(PChar);
@@ -2344,8 +2351,7 @@ void RemoveSub(CCharEntity* PChar)
 
 bool EquipArmor(CCharEntity* PChar, uint8 slotID, uint8 equipSlotID, uint8 containerID)
 {
-    CItemEquipment* PItem   = dynamic_cast<CItemEquipment*>(PChar->getStorage(containerID)->GetItem(slotID));
-    CItemEquipment* oldItem = PChar->getEquip((SLOTTYPE)equipSlotID);
+    CItemEquipment* PItem = dynamic_cast<CItemEquipment*>(PChar->getStorage(containerID)->GetItem(slotID));
 
     if (PItem == nullptr)
     {
@@ -2359,20 +2365,6 @@ bool EquipArmor(CCharEntity* PChar, uint8 slotID, uint8 equipSlotID, uint8 conta
         !PItem->isEquippableByRace(PChar->look.race))
     {
         return false;
-    }
-
-    if (equipSlotID == SLOT_MAIN)
-    {
-        if (!(slotID == PItem->getSlotID() && oldItem && (oldItem->isType(ITEM_WEAPON) && PItem->isType(ITEM_WEAPON)) &&
-              (static_cast<CItemWeapon*>(PItem)->isTwoHanded() && static_cast<CItemWeapon*>(oldItem)->isTwoHanded())))
-        {
-            CItemEquipment* PSubItem = PChar->getEquip(SLOT_SUB);
-
-            if (PSubItem != nullptr && PSubItem->isType(ITEM_EQUIPMENT) && (!PSubItem->IsShield()))
-            {
-                RemoveSub(PChar);
-            }
-        }
     }
 
     UnequipItem(PChar, equipSlotID, Recalculate::No);
@@ -2462,7 +2454,16 @@ bool EquipArmor(CCharEntity* PChar, uint8 slotID, uint8 equipSlotID, uint8 conta
                         }
                         break;
                         default:
-                            break;
+                        {
+                            // one-handed main: keep a dual-wield weapon or shield, but drop a grip
+                            auto*      PSubWeapon = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_SUB));
+                            const bool subIsGrip  = PSubWeapon != nullptr && PSubWeapon->getSkillType() == xi::SkillType::None;
+                            if (subIsGrip)
+                            {
+                                UnequipItem(PChar, SLOT_SUB, Recalculate::No);
+                            }
+                        }
+                        break;
                     }
                     if (PChar->PAI->IsEngaged())
                     {
@@ -2787,6 +2788,20 @@ void UpdateWeaponStyle(CCharEntity* PChar, uint8 equipSlotID, CItemEquipment* PI
             else
             {
                 PChar->mainlook.ranged = PChar->look.ranged;
+            }
+
+            break;
+        case SLOT_AMMO:
+            if (!PChar->getEquip(SLOT_RANGED))
+            {
+                if (hasValidStyle(PChar, PItem, appearance))
+                {
+                    PChar->mainlook.ranged = appearanceModel;
+                }
+                else
+                {
+                    PChar->mainlook.ranged = PChar->look.ranged;
+                }
             }
 
             break;
@@ -3445,6 +3460,8 @@ void EquipItem(CCharEntity* PChar, uint8 slotID, uint8 equipSlotID, uint8 contai
 
     PChar->updatemask |= UPDATE_HP;
     PChar->updatemask |= UPDATE_LOOK;
+
+    PChar->setPersist(CharPersist::Equip | CharPersist::Look);
 }
 
 /************************************************************************
@@ -3495,7 +3512,6 @@ void CheckValidEquipment(CCharEntity* PChar)
     }
 
     BuildingCharWeaponSkills(PChar);
-    PChar->RequestPersist(CHAR_PERSIST::EQUIP);
 }
 
 void RemoveAllEquipment(CCharEntity* PChar)
@@ -3515,7 +3531,6 @@ void RemoveAllEquipment(CCharEntity* PChar)
     CheckUnarmedWeapon(PChar);
 
     BuildingCharWeaponSkills(PChar);
-    PChar->RequestPersist(CHAR_PERSIST::EQUIP);
 }
 
 /************************************************************************
@@ -5354,8 +5369,8 @@ void DistributeCapacityPoints(CCharEntity* PChar, CMobEntity* PMob)
 
     // TODO: Capacity Points cannot be gained in Abyssea or Reives.  In addition, Gates areas,
     //       Ra'Kaznar, Escha, and Reisenjima reduce party penalty for capacity points earned.
-    ZONEID zone     = PChar->loc.zone->GetID();
-    uint8  mobLevel = PMob->GetMLevel();
+    xi::ZoneId zone     = PChar->loc.zone->GetID();
+    uint8      mobLevel = PMob->GetMLevel();
 
     PChar->ForAlliance(
         [&PMob, &zone, &mobLevel](CBattleEntity* PPartyMember)
@@ -5767,7 +5782,7 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
         // TODO: WOTG Expansion Sigil
 
         // Cruor Drops in Abyssea zones.
-        uint16 Pzone = PChar->getZone();
+        const auto Pzone = PChar->getZone();
         if (zoneutils::GetCurrentRegion(Pzone) == REGION_TYPE::ABYSSEA)
         {
             uint16 TextID = luautils::GetTextIDVariable(Pzone, "CRUOR_OBTAINED");
@@ -5921,6 +5936,39 @@ void SaveCharPosition(CCharEntity* PChar)
                      PChar->id);
 }
 
+void PersistCharVars(const std::vector<CharVarChange>& rows)
+{
+    TracyZoneScoped;
+
+    if (rows.empty())
+    {
+        return;
+    }
+
+    db::transaction(
+        [&]()
+        {
+            for (const auto& row : rows)
+            {
+                PersistCharVar(row.charid, row.name, row.value, row.expiry);
+            }
+        });
+}
+
+void SaveCharPositions(const std::vector<CharPosition>& rows)
+{
+    TracyZoneScoped;
+
+    // not an upsert: `chars` has a BEFORE INSERT trigger that fires even on update
+    db::executeBulk(
+        "UPDATE chars SET pos_rot = ?, pos_x = ?, pos_y = ?, pos_z = ?, boundary = ? WHERE charid = ?",
+        rows,
+        [](const CharPosition& row)
+        {
+            return std::make_tuple(row.rotation, row.x, row.y, row.z, row.boundary, row.charid);
+        });
+}
+
 /* TODO: Move linkshell persistence here
 void SaveCharLinkshells(CCharEntity* PChar)
 {
@@ -5963,7 +6011,6 @@ void SaveFame(CCharEntity* PChar)
                      "fame_bastok = ?,"
                      "fame_windurst = ?,"
                      "fame_norg = ?,"
-                     "fame_jeuno = ?,"
                      "fame_aby_konschtat = ?,"
                      "fame_aby_tahrongi = ?,"
                      "fame_aby_latheine = ?,"
@@ -5975,21 +6022,20 @@ void SaveFame(CCharEntity* PChar)
                      "fame_aby_uleguerand = ?,"
                      "fame_adoulin = ? "
                      "WHERE charid = ?",
-                     PChar->profile.fame[0],
-                     PChar->profile.fame[1],
-                     PChar->profile.fame[2],
-                     PChar->profile.fame[3],
-                     PChar->profile.fame[4],
-                     PChar->profile.fame[5],
-                     PChar->profile.fame[6],
-                     PChar->profile.fame[7],
-                     PChar->profile.fame[8],
-                     PChar->profile.fame[9],
-                     PChar->profile.fame[10],
-                     PChar->profile.fame[11],
-                     PChar->profile.fame[12],
-                     PChar->profile.fame[13],
-                     PChar->profile.fame[14],
+                     PChar->profile.fame.Sandoria,
+                     PChar->profile.fame.Bastok,
+                     PChar->profile.fame.Windurst,
+                     PChar->profile.fame.Norg,
+                     PChar->profile.fame.AbysseaKonschtat,
+                     PChar->profile.fame.AbysseaTahrongi,
+                     PChar->profile.fame.AbysseaLaTheine,
+                     PChar->profile.fame.AbysseaMisareaux,
+                     PChar->profile.fame.AbysseaVunkerl,
+                     PChar->profile.fame.AbysseaAttohwa,
+                     PChar->profile.fame.AbysseaAltepa,
+                     PChar->profile.fame.AbysseaGrauberg,
+                     PChar->profile.fame.AbysseaUleguerand,
+                     PChar->profile.fame.Adoulin,
                      PChar->id);
 }
 
@@ -6178,66 +6224,124 @@ void SavePrevZoneLineID(CCharEntity* PChar, uint32 ZoneLineID)
                      PChar->id);
 }
 
+auto BuildCharEquipSlots(const CCharEntity* PChar) -> std::vector<CharEquipSlot>
+{
+    std::vector<CharEquipSlot> rows;
+
+    for (uint8 i = 0; i < 18; ++i)
+    {
+        if (const auto eloc = PChar->equipLocation(i))
+        {
+            rows.push_back({ .charid = PChar->id, .equipSlotId = i, .slotId = eloc->Slot, .containerId = static_cast<uint8>(eloc->Container) });
+        }
+    }
+
+    return rows;
+}
+
 void SaveCharEquip(CCharEntity* PChar)
 {
     TracyZoneScoped;
 
-    for (uint8 i = 0; i < 18; ++i)
-    {
-        auto eloc = PChar->equipLocation(i);
-        if (!eloc)
-        {
-            db::preparedStmt("DELETE FROM char_equip WHERE charid = ? AND equipslotid = ? LIMIT 1", PChar->id, i);
-        }
-        else
-        {
-            db::preparedStmt("INSERT INTO char_equip "
-                             "SET charid = ?, equipslotid = ?, slotid = ?, containerid = ? "
-                             "ON DUPLICATE KEY UPDATE slotid  = ?, containerid = ?",
-                             PChar->id,
-                             i,
-                             eloc->Slot,
-                             static_cast<uint8>(eloc->Container),
-                             eloc->Slot,
-                             static_cast<uint8>(eloc->Container));
-        }
-    }
+    SaveCharEquips({ PChar->id }, BuildCharEquipSlots(PChar));
 }
 
-void SaveCharLook(CCharEntity* PChar)
+void SaveCharEquips(const std::vector<uint32>& replaceFor, const std::vector<CharEquipSlot>& rows)
 {
     TracyZoneScoped;
 
-    look_t* look = (PChar->getStyleLocked() ? &PChar->mainlook : &PChar->look);
-    db::preparedStmt("UPDATE char_look "
-                     "SET head = ?, body = ?, hands = ?, legs = ?, feet = ?, main = ?, sub = ?, ranged = ? "
-                     "WHERE charid = ?",
-                     look->head,
-                     look->body,
-                     look->hands,
-                     look->legs,
-                     look->feet,
-                     look->main,
-                     look->sub,
-                     look->ranged,
-                     PChar->id);
+    if (replaceFor.empty())
+    {
+        return;
+    }
 
-    db::preparedStmt("UPDATE chars SET isstylelocked = ? WHERE charid = ?", PChar->getStyleLocked() ? 1 : 0, PChar->id);
+    db::transaction(
+        [&]()
+        {
+            db::executeBulk(
+                "DELETE FROM char_equip WHERE charid = ?",
+                replaceFor,
+                [](uint32 charid)
+                {
+                    return std::make_tuple(charid);
+                });
 
-    db::preparedStmt("INSERT INTO char_style (charid, head, body, hands, legs, feet, main, sub, ranged) "
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "
-                     "charid = VALUES(charid), head = VALUES(head), body = VALUES(body), "
-                     "hands = VALUES(hands), legs = VALUES(legs), feet = VALUES(feet), "
-                     "main = VALUES(main), sub = VALUES(sub), ranged = VALUES(ranged)",
-                     PChar->id,
-                     PChar->styleItems[SLOT_HEAD],
-                     PChar->styleItems[SLOT_BODY],
-                     PChar->styleItems[SLOT_HANDS],
-                     PChar->styleItems[SLOT_LEGS],
-                     PChar->styleItems[SLOT_FEET],
-                     PChar->styleItems[SLOT_MAIN],
-                     PChar->styleItems[SLOT_SUB],
-                     PChar->styleItems[SLOT_RANGED]);
+            db::executeBulk(
+                "INSERT INTO char_equip (charid, equipslotid, slotid, containerid) VALUES (?,?,?,?)",
+                rows,
+                [](const CharEquipSlot& row)
+                {
+                    return std::make_tuple(row.charid, row.equipSlotId, row.slotId, row.containerId);
+                });
+        });
+}
+
+auto BuildCharAppearance(const CCharEntity* PChar) -> CharAppearance
+{
+    const look_t* look = [&]()
+    {
+        if (PChar->getStyleLocked())
+        {
+            return &PChar->mainlook;
+        }
+
+        return &PChar->look;
+    }();
+
+    return {
+        .charid      = PChar->id,
+        .look        = { look->head, look->body, look->hands, look->legs, look->feet, look->main, look->sub, look->ranged },
+        .styleItems  = { PChar->styleItems[SLOT_HEAD], PChar->styleItems[SLOT_BODY], PChar->styleItems[SLOT_HANDS], PChar->styleItems[SLOT_LEGS], PChar->styleItems[SLOT_FEET], PChar->styleItems[SLOT_MAIN], PChar->styleItems[SLOT_SUB], PChar->styleItems[SLOT_RANGED] },
+        .styleLocked = PChar->getStyleLocked(),
+    };
+}
+
+void SaveCharAppearances(const std::vector<CharAppearance>& rows)
+{
+    TracyZoneScoped;
+
+    if (rows.empty())
+    {
+        return;
+    }
+
+    const auto slotRow = [](uint32 charid, const std::array<uint16, 8>& slots)
+    {
+        return std::make_tuple(charid, slots[0], slots[1], slots[2], slots[3], slots[4], slots[5], slots[6], slots[7]);
+    };
+
+    db::transaction(
+        [&]()
+        {
+            // upsert, not update: char_look rows aren't created by the char_insert trigger
+            db::executeBulk(
+                "INSERT INTO char_look (charid, head, body, hands, legs, feet, main, sub, ranged) VALUES (?,?,?,?,?,?,?,?,?) "
+                "ON DUPLICATE KEY UPDATE head = VALUES(head), body = VALUES(body), hands = VALUES(hands), "
+                "legs = VALUES(legs), feet = VALUES(feet), main = VALUES(main), sub = VALUES(sub), ranged = VALUES(ranged)",
+                rows,
+                [&](const CharAppearance& row)
+                {
+                    return slotRow(row.charid, row.look);
+                });
+
+            db::executeBulk(
+                "UPDATE chars SET isstylelocked = ? WHERE charid = ?",
+                rows,
+                [](const CharAppearance& row)
+                {
+                    return std::make_tuple(row.styleLocked, row.charid);
+                });
+
+            db::executeBulk(
+                "INSERT INTO char_style (charid, head, body, hands, legs, feet, main, sub, ranged) VALUES (?,?,?,?,?,?,?,?,?) "
+                "ON DUPLICATE KEY UPDATE head = VALUES(head), body = VALUES(body), hands = VALUES(hands), "
+                "legs = VALUES(legs), feet = VALUES(feet), main = VALUES(main), sub = VALUES(sub), ranged = VALUES(ranged)",
+                rows,
+                [&](const CharAppearance& row)
+                {
+                    return slotRow(row.charid, row.styleItems);
+                });
+        });
 }
 
 /************************************************************************
@@ -6830,13 +6934,13 @@ auto hasMogLockerAccess(const CCharEntity* PChar) -> bool
 
                 // Either in your own MH in Al Zahbi or Whitegate
                 if (PChar->m_moghouseID == PChar->id &&
-                    (zoneId == ZONE_AL_ZAHBI || zoneId == ZONE_AHT_URHGAN_WHITEGATE))
+                    (zoneId == xi::ZoneId::AlZahbi || zoneId == xi::ZoneId::AhtUrhganWhitegate))
                 {
                     return true;
                 }
 
                 // Or in Nashmau where a Nomad Moogle is present.
-                if (zoneId == ZONE_NASHMAU)
+                if (zoneId == xi::ZoneId::Nashmau)
                 {
                     return true;
                 }
@@ -7344,7 +7448,7 @@ std::string GetConquestPointsName(CCharEntity* PChar)
     }
 }
 
-auto SendToZone(CCharEntity* PChar, uint16 zoneId) -> bool
+auto SendToZone(CCharEntity* PChar, const xi::ZoneId zoneId) -> bool
 {
     TracyZoneScoped;
 
@@ -7420,7 +7524,7 @@ void SendDisconnect(CCharEntity* PChar)
     SaveCharPosition(PChar);
     PChar->clearPacketList();
 
-    PChar->loc.destination     = 0xFFFF;
+    PChar->loc.destination     = ZONE_NO_DESTINATION;
     PChar->status              = xi::Status::Shutdown;
     PChar->requestedZoneChange = true;
 
@@ -8157,8 +8261,7 @@ void removeCharFromZone(CCharEntity* PChar)
         PChar->loc.zone->DecreaseZoneCounter(PChar);
     }
 
-    PChar->StatusEffectContainer->SaveStatusEffects(PChar->PSession->shuttingDown == 1);
-    PChar->PersistData();
+    persist::flush(PChar, IsLogout(PChar->PSession->shuttingDown == 1));
     charutils::SavePlayTime(PChar);
     charutils::SaveCharStats(PChar);
     charutils::SaveCharExp(PChar, PChar->GetMJob());

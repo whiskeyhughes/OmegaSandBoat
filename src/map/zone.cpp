@@ -51,8 +51,6 @@ constexpr std::uint16_t WeatherCycle = 2160;
 #include "enums/loot_recast.h"
 #include "ipc_client.h"
 #include "latent_effect_container.h"
-#include "map/navmesh/navmesh.h"
-#include "map/navmesh/navmesh_builder.h"
 #include "map_engine.h"
 #include "monstrosity.h"
 #include "nominate_manager.h"
@@ -72,9 +70,15 @@ constexpr std::uint16_t WeatherCycle = 2160;
 #include "utils/charutils.h"
 #include "utils/moduleutils.h"
 
+#include <map/navmesh/detour_navmesh.h>
+#include <map/navmesh/navmesh.h>
+#include <map/navmesh/navmesh_builder.h>
+#include <map/navmesh/null_navmesh.h>
+#include <map/ximesh/null_ximesh.h>
 #include <map/ximesh/ximesh.h>
+#include <map/ximesh/ximesh_impl.h>
 
-CZone::CZone(Scheduler& scheduler, MapConfig config, ZONEID ZoneID, REGION_TYPE RegionID, CONTINENT_TYPE ContinentID, uint8 levelRestriction)
+CZone::CZone(Scheduler& scheduler, MapConfig config, xi::ZoneId ZoneID, REGION_TYPE RegionID, CONTINENT_TYPE ContinentID, uint8 levelRestriction)
 : scheduler_(scheduler)
 , config_(config)
 , navMesh_{ std::make_unique<NullNavMesh>() }
@@ -123,7 +127,7 @@ CZone::~CZone()
     m_zoneLineList.clear();
 }
 
-auto CZone::GetID() const -> ZONEID
+auto CZone::GetID() const -> xi::ZoneId
 {
     return m_zoneID;
 }
@@ -357,11 +361,11 @@ void CZone::LoadZoneLines()
         auto* zl = new zoneLine_t;
 
         zl->zoneLineId              = rset->get<uint32>("zonelineid");
-        zl->originZoneId            = rset->get<ZONEID>("from_zone");
+        zl->originZoneId            = rset->get<xi::ZoneId>("from_zone");
         zl->originPos.x             = rset->get<float>("from_pos_x");
         zl->originPos.y             = rset->get<float>("from_pos_y");
         zl->originPos.z             = rset->get<float>("from_pos_z");
-        zl->destinationZoneId       = rset->get<ZONEID>("to_zone");
+        zl->destinationZoneId       = rset->get<xi::ZoneId>("to_zone");
         zl->destinationPos.x        = rset->get<float>("to_pos_x");
         zl->destinationPos.y        = rset->get<float>("to_pos_y");
         zl->destinationPos.z        = rset->get<float>("to_pos_z");
@@ -466,9 +470,66 @@ void CZone::LoadZoneSettings()
     }
 }
 
+namespace
+{
+
+// TODO: These should be baked into per-zone navmesh configs, and should be assumed to have been
+//     : already applied to the xiNavmeshes submodule repo.
+void applyZoneNavMeshOverrides(const xi::ZoneId zoneId, NavMeshConfig& config)
+{
+    // Ceizak Battlegrounds carries a small island of stray triangles parked around
+    // Z = -9932912, roughly ten million units outside a zone whose grid only covers
+    // +/- 640 x 600. Left in, it stretches the world bounds and with them the tile
+    // grid: 38x310421 tiles, nearly all empty, taking over three minutes to walk.
+    if (zoneId == xi::ZoneId::CeizakBattlegrounds && config.skipSpheres.empty())
+    {
+        config.skipSpheres = {
+            NavMeshSkipSphere{ .center = { -496.0f, -6.5f, -9932914.5f }, .radius = 100.0f },
+        };
+    }
+
+    // An explicitly-supplied list (e.g. from !rebuildnavmesh) wins over the
+    // per-zone defaults below.
+    if (!config.ySkipPlanes.empty())
+    {
+        return;
+    }
+
+    //
+    // For some reason, there are staggered flat planes below the regularly navigable areas.
+    // These were observed by hand, and then given these exceptions.
+    //
+
+    if (zoneId == xi::ZoneId::NewtonMovalpolos)
+    {
+        config.ySkipPlanes = { 48.0f, 52.0f, 56.0f };
+    }
+
+    if (zoneId == xi::ZoneId::OldtonMovalpolos)
+    {
+        config.ySkipPlanes = { 32.0f, 40.0f, 48.0f, 52.0f, 56.0f, 60.0f };
+    }
+
+    // Similar to above, all the Cloisters have big flat planes below the regular
+    // navigable areas. Cloisters are BCNM zones with 3x staggered copies of the
+    // arena, so the plane repeats at each copy's altitude.
+    const auto isCloister = zoneId == xi::ZoneId::CloisterOfFlames ||
+                            zoneId == xi::ZoneId::CloisterOfFrost ||
+                            zoneId == xi::ZoneId::CloisterOfGales ||
+                            zoneId == xi::ZoneId::CloisterOfStorms ||
+                            zoneId == xi::ZoneId::CloisterOfTides ||
+                            zoneId == xi::ZoneId::CloisterOfTremors;
+    if (isCloister)
+    {
+        config.ySkipPlanes = { -60.0f, 0.0f, 60.0f };
+    }
+}
+
+} // namespace
+
 auto CZone::LoadNavMesh() -> Task<void>
 {
-    auto       navMesh = std::make_unique<CNavMesh>(static_cast<uint16>(GetID()));
+    auto       navMesh = std::make_unique<DetourNavMesh>(static_cast<uint16>(GetID()));
     const auto file    = fmt::format("navmeshes/{}.nav", getName());
 
     if (!config_.rebuildNavmeshes && navMesh->load(file))
@@ -479,7 +540,11 @@ auto CZone::LoadNavMesh() -> Task<void>
 
     NavMeshBuilder builder(*xiMesh_);
 
-    auto* dtNavMesh = co_await builder.buildAsync(scheduler_, getName(), static_cast<uint16>(GetID()), NavMeshConfig{});
+    auto config = NavMeshConfig{};
+
+    applyZoneNavMeshOverrides(GetID(), config);
+
+    auto* dtNavMesh = co_await builder.buildAsync(scheduler_, getName(), static_cast<uint16>(GetID()), config);
     if (dtNavMesh && navMesh->installNavMesh(dtNavMesh))
     {
         navMesh->save(file);
@@ -490,11 +555,14 @@ auto CZone::LoadNavMesh() -> Task<void>
     DebugNavmesh("CZone::LoadNavMesh: Build failed for zone (%s)", getName().c_str());
 }
 
-void CZone::RebuildNavMesh(const NavMeshConfig& config)
+void CZone::RebuildNavMesh(const NavMeshConfig& configIn)
 {
     const auto  zoneName  = getName();
     const auto  zoneID    = static_cast<uint16>(GetID());
     const auto* xiMeshPtr = xiMesh_.get();
+
+    auto config = configIn;
+    applyZoneNavMeshOverrides(GetID(), config);
 
     scheduler_.postToMainThread(
         [this, zoneName, zoneID, config, xiMeshPtr]() -> Task<void>
@@ -502,7 +570,7 @@ void CZone::RebuildNavMesh(const NavMeshConfig& config)
             NavMeshBuilder builder(*xiMeshPtr);
 
             auto* dtNavMesh = co_await builder.buildAsync(scheduler_, zoneName, zoneID, config);
-            auto  navMesh   = std::make_unique<CNavMesh>(zoneID);
+            auto  navMesh   = std::make_unique<DetourNavMesh>(zoneID);
             if (dtNavMesh && navMesh->installNavMesh(dtNavMesh))
             {
                 navMesh->save(fmt::format("navmeshes/{}.nav", zoneName));
@@ -511,12 +579,12 @@ void CZone::RebuildNavMesh(const NavMeshConfig& config)
         });
 }
 
-auto CZone::navMesh() const -> INavMesh*
+auto CZone::navMesh() const -> NavMesh*
 {
     return navMesh_.get();
 }
 
-auto CZone::xiMesh() const -> IXiMesh*
+auto CZone::xiMesh() const -> XiMesh*
 {
     return xiMesh_.get();
 }
@@ -571,7 +639,7 @@ void CZone::LoadXiMesh()
     {
         try
         {
-            xiMesh_ = std::make_unique<XiMesh>(file);
+            xiMesh_ = std::make_unique<XiMeshImpl>(file);
         }
         catch (const std::exception& e)
         {
@@ -627,7 +695,7 @@ void CZone::onEntityMoved(CBaseEntity* PEntity)
     m_zoneEntities->onEntityMoved(PEntity);
 }
 
-void CZone::TransportDepart(uint16 boundary, uint16 prevZoneId, uint16 transportId)
+void CZone::TransportDepart(const uint16 boundary, const xi::ZoneId prevZoneId, const uint16 transportId)
 {
     m_zoneEntities->TransportDepart(boundary, prevZoneId, transportId);
 }
@@ -1043,7 +1111,7 @@ void CZone::CharZoneIn(CCharEntity* PChar)
     TracyZoneScoped;
 
     PChar->loc.zone        = this;
-    PChar->loc.destination = 0;
+    PChar->loc.destination = xi::ZoneId::Unknown;
     PChar->clearTriggerAreas();
 
     if (PChar->isMounted() && !CanUseMisc(xi::ZoneMisc::Mount))
@@ -1137,7 +1205,8 @@ void CZone::CharZoneIn(CCharEntity* PChar)
     }
 
     // Mark current zone as visited
-    PChar->m_ZonesVisitedList[PChar->getZone() >> 3] |= (1 << (PChar->getZone() % 8));
+    const auto visitedZone = static_cast<uint16>(PChar->getZone());
+    PChar->m_ZonesVisitedList[visitedZone >> 3] |= (1 << (visitedZone % 8));
 
     monstrosity::HandleZoneIn(PChar);
 

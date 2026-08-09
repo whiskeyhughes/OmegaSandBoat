@@ -64,7 +64,9 @@
 #include "packets/s2c/0x05a_motionmes.h"
 #include "packets/s2c/0x0f9_res.h"
 
+#include "persist_batch.h"
 #include "utils/battleutils.h"
+
 #include "utils/charutils.h"
 #include "utils/instanceutils.h"
 #include "utils/itemutils.h"
@@ -1144,7 +1146,7 @@ void LoadExpDifficultyCurves(const sol::table& expToDifficultyTable, const uint8
     charutils::SetExpDifficultyCurve(expDifficultyTable, iep);
 }
 
-void PopulateIDLookups(uint16 zoneId, const std::string& zoneName)
+void PopulateIDLookups(const xi::ZoneId zoneId, const std::string& zoneName)
 {
     TracyZoneScoped;
 
@@ -1313,18 +1315,18 @@ void PopulateIDLookupsByFilename(Maybe<std::string> maybeFilename)
 
     const auto handleZone = [&](const std::string& zoneName)
     {
-        uint16 zoneId = [&]() -> uint16
+        const auto zoneId = [&]() -> xi::ZoneId
         {
             const auto rset = db::preparedStmt("SELECT zoneid FROM zone_settings WHERE name = ? LIMIT 1", zoneName);
             if (rset && rset->rowsCount())
             {
                 if (rset->next())
                 {
-                    return rset->get<uint16>("zoneid");
+                    return rset->get<xi::ZoneId>("zoneid");
                 }
             }
 
-            return 0;
+            return xi::ZoneId::Unknown;
         }();
 
         PopulateIDLookups(zoneId, zoneName);
@@ -1354,7 +1356,7 @@ void PopulateIDLookupsByFilename(Maybe<std::string> maybeFilename)
     }
 }
 
-void PopulateIDLookupsByZone(Maybe<uint16> maybeZoneId)
+void PopulateIDLookupsByZone(Maybe<xi::ZoneId> maybeZoneId)
 {
     TracyZoneScoped;
 
@@ -1479,7 +1481,7 @@ void InitInteractionGlobal()
     }
 }
 
-CZone* GetZone(uint16 zoneId)
+auto GetZone(const xi::ZoneId zoneId) -> CZone*
 {
     TracyZoneScoped;
 
@@ -1634,7 +1636,7 @@ void SetRegionalConquestOverseers(uint8 regionID)
     callGlobal<void>("xi.conquest.setRegionalConquestOverseers", regionID);
 }
 
-void SendLuaFuncStringToZone(uint16 requestingZoneId, uint16 executorZoneId, const std::string& str)
+void SendLuaFuncStringToZone(const xi::ZoneId requestingZoneId, const xi::ZoneId executorZoneId, const std::string& str)
 {
     message::send(ipc::LuaFunction{
         .requesterZoneId = requestingZoneId,
@@ -2151,7 +2153,7 @@ void SendToJailOffline(uint32 playerId, int8 cellId, float posX, float posY, flo
                      posY,
                      posZ,
                      rot,
-                     ZONEID::ZONE_MORDION_GAOL,
+                     xi::ZoneId::MordionGaol,
                      playerId);
 }
 
@@ -2176,11 +2178,11 @@ void DrawIn(CLuaBaseEntity* PLuaBaseEntity, const sol::table& table, float offse
  *                                                                       *
  ************************************************************************/
 
-int32 GetTextIDVariable(uint16 ZoneID, const char* variable)
+auto GetTextIDVariable(const xi::ZoneId ZoneID, const char* variable) -> int32
 {
     TracyZoneScoped;
 
-    return lua["zones"][ZoneID]["text"][variable].get_or(0);
+    return lua["zones"][static_cast<uint16>(ZoneID)]["text"][variable].get_or(0);
 }
 
 /************************************************************************
@@ -2213,7 +2215,7 @@ bool IsContentEnabled(const std::string& contentTag)
     return true;
 }
 
-void OnZoneInitialize(uint16 ZoneID)
+void OnZoneInitialize(const xi::ZoneId ZoneID)
 {
     TracyZoneScoped;
 
@@ -4071,7 +4073,7 @@ void OnGameHour(CZone* PZone)
     }
 }
 
-void OnZoneWeatherChange(const uint16 zoneId, xi::Weather weather)
+void OnZoneWeatherChange(const xi::ZoneId zoneId, xi::Weather weather)
 {
     TracyZoneScoped;
 
@@ -4098,7 +4100,7 @@ void OnZoneWeatherChange(const uint16 zoneId, xi::Weather weather)
     }
 }
 
-void OnTOTDChange(uint16 ZoneID, uint8 TOTD)
+void OnTOTDChange(const xi::ZoneId ZoneID, const uint8 TOTD)
 {
     TracyZoneScoped;
 
@@ -4789,8 +4791,7 @@ void Terminate()
             PZone->ForEachChar(
                 [](CCharEntity* PChar)
                 {
-                    PChar->PersistData();
-                    charutils::SaveCharPosition(PChar);
+                    persist::flush(PChar, IsLogout::Yes);
                     charutils::SaveCharStats(PChar);
                     charutils::SaveCharExp(PChar, PChar->GetMJob());
                 });
@@ -4862,7 +4863,7 @@ void AfterInstanceRegister(CBaseEntity* PChar)
     }
 }
 
-int32 OnInstanceLoadFailed(CZone* PZone)
+auto OnInstanceLoadFailed(CZone* PZone) -> xi::ZoneId
 {
     TracyZoneScoped;
 
@@ -4871,7 +4872,7 @@ int32 OnInstanceLoadFailed(CZone* PZone)
     auto onInstanceLoadFailed = lua["xi"]["zones"][name]["Zone"]["onInstanceLoadFailed"];
     if (!onInstanceLoadFailed.valid())
     {
-        return -1;
+        return ZONE_NO_DESTINATION;
     }
 
     auto result = onInstanceLoadFailed();
@@ -4879,10 +4880,10 @@ int32 OnInstanceLoadFailed(CZone* PZone)
     {
         sol::error err = result;
         ShowError("luautils::onInstanceLoadFailed %s", err.what());
-        return 0;
+        return xi::ZoneId::Unknown;
     }
 
-    return result.get_type(0) == sol::type::number ? result.get<int32>(0) : 0;
+    return result.get_type(0) == sol::type::number ? result.get<xi::ZoneId>(0) : xi::ZoneId::Unknown;
 }
 
 void OnInstanceTimeUpdate(CZone* PZone, CInstance* PInstance, uint32 time)
@@ -5111,7 +5112,7 @@ void ClearCharVarFromAll(const std::string& varName)
     charutils::ClearCharVarFromAll(varName);
 }
 
-void OnTransportEvent(CCharEntity* PChar, uint16 prevZoneId, uint16 transportId)
+void OnTransportEvent(CCharEntity* PChar, xi::ZoneId prevZoneId, uint16 transportId)
 {
     TracyZoneScoped;
 
@@ -5421,17 +5422,16 @@ sol::table GetFurthestValidPosition(CLuaBaseEntity* fromTarget, float distance, 
     CBaseEntity* entity = fromTarget->GetBaseEntity();
     position_t   pos    = nearPosition(entity->loc.p, distance, theta);
 
-    float validPos[3];
-    bool  success = entity->loc.zone->navMesh()->findFurthestValidPoint(entity->loc.p, pos, validPos);
-    if (!success)
+    const auto validPos = entity->loc.zone->navMesh()->findFurthestValidPoint(entity->loc.p, pos);
+    if (!validPos)
     {
         return sol::lua_nil;
     }
 
     sol::table outPos = lua.create_table();
-    outPos["x"]       = validPos[0];
-    outPos["y"]       = validPos[1];
-    outPos["z"]       = validPos[2];
+    outPos["x"]       = validPos->x;
+    outPos["y"]       = validPos->y;
+    outPos["z"]       = validPos->z;
 
     return outPos;
 }
@@ -5853,7 +5853,7 @@ CBaseEntity* GenerateDynamicEntity(CZone* PZone, CInstance* PInstance, sol::tabl
     else
     {
         auto groupId     = table.get_or<uint32>("groupId", 0);
-        auto groupZoneId = table.get_or<uint32>("groupZoneId", 0);
+        auto groupZoneId = static_cast<xi::ZoneId>(table.get_or<uint32>("groupZoneId", 0));
 
         PEntity = mobutils::InstantiateDynamicMob(groupId, groupZoneId, PZone->GetID());
     }
@@ -6117,7 +6117,7 @@ void InitializeFishingContestSystem()
 {
     // IMPORTANT: This should only be called on the Zone Init in Selbina
     // Do not run this from multiple server instances
-    if (g_PZoneList[ZONEID::ZONE_SELBINA] != nullptr)
+    if (g_PZoneList[xi::ZoneId::Selbina] != nullptr)
     {
         fishingcontest::InitializeFishingContestSystem();
     }

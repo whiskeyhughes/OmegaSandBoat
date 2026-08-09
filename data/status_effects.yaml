@@ -2,11 +2,11 @@
 
 meta:
   enum:
-    cpp:
-      underlying: uint16_t
-      class:      StatusEffect
-    lua:
-      table: xi.effect
+    - cpp:
+        underlying: uint16_t
+        class:      StatusEffect
+      lua:
+        table: xi.effect
 
 status_effects:
   ko:
@@ -2848,6 +2848,7 @@ status_effects:
     flags:
       - death
       - on_zone
+      - logout
       - no_cancel
     overwrite: ignore_duplicate
     sort_key:  2050

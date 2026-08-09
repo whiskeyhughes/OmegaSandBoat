@@ -32,7 +32,7 @@ auto GP_CLI_COMMAND_GUILD_BUY::validate(MapSession* PSession, const CCharEntity*
 {
     return PacketValidator(PChar)
         .blockedBy({ BlockedState::InEvent })
-        .mustNotEqual(PChar->guildShopNpc_.id, 0, "Character does not have a guild shop")
+        .mustNotEqual(PChar->guildShopNpc_.UniqueNo, 0, "Character does not have a guild shop")
         .range("ItemNum", this->ItemNum, 1, 99)
         .mustEqual(this->PropertyItemIndex, 0, "PropertyItemIndex not 0");
 }
@@ -54,17 +54,17 @@ void GP_CLI_COMMAND_GUILD_BUY::process(MapSession* PSession, CCharEntity* PChar)
         return;
     }
 
-    if (auto* PNpc = zoneutils::GetEntity(PChar->guildShopNpc_.id, TYPE_NPC))
+    if (auto* PNpc = zoneutils::GetEntity(PChar->guildShopNpc_.UniqueNo, TYPE_NPC))
     {
-        // onPlayerBuy returns { itemNo, count, trade }; serialize it into the 0x082 result
+        // onPlayerBuy returns { itemNo, count, tradeCode }; serialize it into the 0x082 result
         // (a rejection is { 0, 0, -1 }).
         const auto result = luautils::callGlobal<sol::table>("xi.guildShops.onPlayerBuy", PChar, PNpc, this->ItemNo, quantity);
         if (result.valid())
         {
-            const auto itemNo = result.get_or("itemNo", uint16{ 0 });
-            const auto count  = result.get_or("count", uint8{ 0 });
-            const auto trade  = result.get_or("trade", int32{ 0 });
-            PChar->pushPacket<GP_SERV_COMMAND_GUILD_BUY>(PChar, count, itemNo, static_cast<uint8>(trade));
+            const auto itemNo    = result.get_or("itemNo", uint16{ 0 });
+            const auto count     = result.get_or("count", uint8{ 0 });
+            const auto tradeCode = result.get_or("tradeCode", int32{ 0 });
+            PChar->pushPacket<GP_SERV_COMMAND_GUILD_BUY>(PChar, count, itemNo, static_cast<uint8>(tradeCode));
         }
     }
 }

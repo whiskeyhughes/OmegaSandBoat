@@ -24,8 +24,11 @@
 #include "common/cbasetypes.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "entities/char_entity.h"
+#include "persist_batch.h"
 
 using Recalculate       = xi::Flag<struct RecalculateTag>;
 using IncludeRecycleBin = xi::Flag<struct IncludeRecycleBinTag>;
@@ -194,8 +197,13 @@ bool  canUseWeaponSkill(CCharEntity* PChar, uint16 wsid);
 void SaveCharJob(const CCharEntity* PChar, xi::Job job); // save the level for the selected character's jobs
 void SaveCharExp(const CCharEntity* PChar, xi::Job job); // save experience for the selected character’s chosen job
 void SaveCharEquip(CCharEntity* PChar);                  // preserve the character’s equipment and appearance
-void SaveCharLook(CCharEntity* PChar);                   // saves a character's appearance based on style locking
 void SaveCharPosition(CCharEntity* PChar);               // save the character's position (x/y/z)
+void SaveCharPositions(const std::vector<CharPosition>& rows);
+void SaveCharEquips(const std::vector<uint32>& replaceFor, const std::vector<CharEquipSlot>& rows);
+void SaveCharAppearances(const std::vector<CharAppearance>& rows);
+void PersistCharVars(const std::vector<CharVarChange>& rows);
+auto BuildCharEquipSlots(const CCharEntity* PChar) -> std::vector<CharEquipSlot>;
+auto BuildCharAppearance(const CCharEntity* PChar) -> CharAppearance;
 // void SaveCharLinkshells(CCharEntity* PChar);     // TODO: save the character's linkshells
 void SaveMissionsList(CCharEntity* PChar);          // save the missions list
 void SaveEminenceData(CCharEntity* PChar);          // save Eminence Record (RoE) data
@@ -257,7 +265,7 @@ void  SetPoints(CCharEntity* PChar, const char* type, int32 amount);
 int32 GetPoints(CCharEntity* PChar, const char* type);
 void  SetUnityLeader(CCharEntity* PChar, uint8 leaderID);
 auto  GetConquestPointsName(CCharEntity* PChar) -> std::string;
-auto  SendToZone(CCharEntity* PChar, uint16 zoneId) -> bool;
+auto  SendToZone(CCharEntity* PChar, xi::ZoneId zoneId) -> bool;
 void  SendDisconnect(CCharEntity* PChar);
 void  ForceLogout(CCharEntity* PChar);
 void  ForceRezone(CCharEntity* PChar);

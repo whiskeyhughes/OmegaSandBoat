@@ -168,14 +168,14 @@ bool CBattleEntity::isInAdoulin()
 {
     if (loc.zone != nullptr)
     {
-        ZONEID zoneid = loc.zone->GetID();
+        xi::ZoneId zoneid = loc.zone->GetID();
         switch (zoneid)
         {
-            case ZONEID::ZONE_WESTERN_ADOULIN:
-            case ZONEID::ZONE_EASTERN_ADOULIN:
-            case ZONEID::ZONE_MOG_GARDEN:
-            case ZONEID::ZONE_SILVER_KNIFE:
-            case ZONEID::ZONE_CELENNIA_MEMORIAL_LIBRARY:
+            case xi::ZoneId::WesternAdoulin:
+            case xi::ZoneId::EasternAdoulin:
+            case xi::ZoneId::MogGarden:
+            case xi::ZoneId::SilverKnife:
+            case xi::ZoneId::CelenniaMemorialLibrary:
                 return true;
             default:
                 break;
@@ -2351,7 +2351,7 @@ void CBattleEntity::Die()
 {
     TracyZoneScoped;
 
-    if (CBaseEntity* PKiller = GetEntity(m_OwnerID.targid))
+    if (CBaseEntity* PKiller = m_OwnerID.resolve())
     {
         static_cast<CBattleEntity*>(PKiller)->ForAlliance(
             [this](CBattleEntity* PMember)
@@ -3366,13 +3366,18 @@ void CBattleEntity::OnRangedAttack(CRangeState& state, action_t& action)
             StatusEffectContainer->DelStatusEffect(xi::StatusEffect::FlashyShot);
             StatusEffectContainer->DelStatusEffect(xi::StatusEffect::StealthShot);
 
-            if (PAmmo != nullptr && xirand::GetRandomNumber(100) > recycleChance)
+            if (PAmmo != nullptr)
             {
-                ++ammoConsumed;
-                charutils::TrackArrowUsageForScavenge(PChar, PAmmo);
-                if (PAmmo->getQuantity() == i)
+                const bool recycleProc = xirand::GetRandomNumber(100) < recycleChance;
+
+                if (!recycleProc)
                 {
-                    hitCount = i;
+                    ++ammoConsumed;
+                    charutils::TrackArrowUsageForScavenge(PChar, PAmmo);
+                    if (PAmmo->getQuantity() == i)
+                    {
+                        hitCount = i;
+                    }
                 }
             }
         }
@@ -4092,11 +4097,6 @@ void CBattleEntity::PostTick()
     }
 }
 
-uint16 CBattleEntity::GetBattleTargetID() const
-{
-    return battleTarget_.targid;
-}
-
 bool CBattleEntity::hasEnmityEXPENSIVE() const
 {
     // TODO: This check seems to always fail for pets?
@@ -4117,7 +4117,7 @@ bool CBattleEntity::hasEnmityEXPENSIVE() const
                                      return;
                                  }
                                  // Account for charmed mobs attacking normal mobs, etc
-                                 if (PMob->GetBattleTargetID() == targid && PMob->allegiance != allegiance)
+                                 if (PMob->battleTarget().ActIndex == targid && PMob->allegiance != allegiance)
                                  {
                                      isTargeted = true;
                                      return;

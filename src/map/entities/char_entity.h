@@ -22,6 +22,7 @@
 #pragma once
 
 #include "aman.h"
+#include "enums/char_persist.h"
 #include "event_info.h"
 #include "gmcall_container.h"
 #include "inventory_sync_state.h"
@@ -40,18 +41,15 @@
 #include <common/types/maybe.h>
 
 #include <array>
-#include <bitset>
 #include <deque>
-#include <map>
 #include <memory>
-#include <set>
 #include <unordered_set>
 
-#include "automaton_entity.h"
+#include "persist_batch.h"
+
 #include "battle_entity.h"
 #include "linkshell.h"
 #include "maze.h"
-#include "packets/s2c/base.h"
 #include "pet_entity.h"
 
 #include <map/entities/types/automaton_info.h>
@@ -64,8 +62,6 @@
 #define MAX_MISSIONID    851
 #define MAX_ABYSSEAZONES 9
 
-#define TIME_BETWEEN_PERSIST 2min
-
 class CItemWeapon;
 class CTrustEntity;
 
@@ -75,6 +71,25 @@ struct jobs_t
     uint8  job[MAX_JOBTYPE]; // the current levels of each of the jobs from above
     uint16 exp[MAX_JOBTYPE]; // the experience points for each of the jobs above
     uint8  genkai;           // the maximum genkai level achieved
+};
+
+// Jeuno and Selbina/Rabao fame are derived
+struct Fame
+{
+    uint16 Sandoria;
+    uint16 Bastok;
+    uint16 Windurst;
+    uint16 Norg;
+    uint16 AbysseaKonschtat;
+    uint16 AbysseaTahrongi;
+    uint16 AbysseaLaTheine;
+    uint16 AbysseaMisareaux;
+    uint16 AbysseaVunkerl;
+    uint16 AbysseaAttohwa;
+    uint16 AbysseaAltepa;
+    uint16 AbysseaGrauberg;
+    uint16 AbysseaUleguerand;
+    uint16 Adoulin;
 };
 
 struct profile_t
@@ -94,7 +109,7 @@ struct profile_t
     uint16 mhflag;
 
     uint16     title;
-    uint16     fame[15];
+    Fame       fame{};
     uint8      rank[3]; // RANK in three kingdoms
     uint16     rankpoints;
     location_t home_point;
@@ -219,13 +234,6 @@ enum CHAR_SUBSTATE
     SUBSTATE_NONE = 0,
     SUBSTATE_IN_CS,
     SUBSTATE_LAST,
-};
-
-enum CHAR_PERSIST : uint8
-{
-    EQUIP    = 0x01,
-    POSITION = 0x02,
-    EFFECTS  = 0x04,
 };
 
 enum class WarpRequest : uint8
@@ -602,6 +610,7 @@ public:
     position_t m_ActionOffsetPos{}; // action offset position from the action packet(currently only used for repositioning of luopans)
 
     location_t m_previousLocation{};
+    float      m_lastMoveDistance{};
 
     uint32 m_PrevZonelineID; // The ID of the previous zoneline the player went through.
 
@@ -678,9 +687,10 @@ public:
     void ClearTrusts();
     void RemoveTrust(CTrustEntity*);
 
-    void RequestPersist(CHAR_PERSIST toPersist);
-    bool PersistData();
-    bool PersistData(timer::time_point tick);
+    auto persist() const -> CharPersist;
+    void setPersist(CharPersist toPersist);
+    void clearPersist(CharPersist toPersist);
+    void takeCharVarChanges(std::vector<CharVarChange>& out);
 
     auto Tick(timer::time_point) -> Task<void> override;
     void PostTick() override;
@@ -808,8 +818,7 @@ private:
     std::unordered_set<std::string>                        charVarChanges;
     std::unordered_set<uint32>                             charTriggerAreaIDs; // Holds any TriggerArea IDs that the player is currently within the bounds of
 
-    uint8             dataToPersist = 0;
-    timer::time_point nextDataPersistTime{};
+    CharPersist persist_{};
 
     // TODO: Don't use raw ptrs for this, but don't duplicate whole packets with unique_ptr either.
     std::deque<std::unique_ptr<CBasicPacket>> PacketList;          // The list of packets to be sent to the character during the next network cycle

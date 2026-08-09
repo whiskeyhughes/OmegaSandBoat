@@ -82,7 +82,6 @@ constexpr auto CHARACTER_SYNC_LIMIT_MAX               = 32U;
 constexpr auto CHARACTER_SYNC_DISTANCE_SWAP_THRESHOLD = 30U;
 constexpr auto CHARACTER_SYNC_PARTY_SIGNIFICANCE      = 100000U;
 constexpr auto CHARACTER_SYNC_ALLI_SIGNIFICANCE       = 10000U;
-constexpr auto PERSIST_CHECK_CHARACTERS               = 20U;
 constexpr auto INTERMEDIATE_CONTAINER_RESERVE_SIZE    = 16U;
 
 inline bool isWithinVerticalDistance(CBaseEntity* source, CBaseEntity* target)
@@ -420,7 +419,7 @@ void CZoneEntities::FindPartyForMob(CBaseEntity* PEntity)
     }
 }
 
-void CZoneEntities::TransportDepart(uint16 boundary, uint16 prevZoneId, uint16 transport)
+void CZoneEntities::TransportDepart(uint16 boundary, xi::ZoneId prevZoneId, uint16 transport)
 {
     TracyZoneScoped;
 
@@ -475,7 +474,7 @@ void CZoneEntities::WeatherChange(xi::Weather weather)
     }
 }
 
-void CZoneEntities::MusicChange(MusicSlot slotId, uint16 trackId)
+void CZoneEntities::MusicChange(xi::MusicSlot slotId, uint16 trackId)
 {
     TracyZoneScoped;
 
@@ -564,12 +563,12 @@ void CZoneEntities::DecreaseZoneCounter(CCharEntity* PChar)
     FOR_EACH_PAIR_CAST_SECOND(CMobEntity*, PCurrentMob, m_mobList)
     {
         PCurrentMob->PEnmityContainer->LogoutReset(PChar->id);
-        if (PCurrentMob->m_OwnerID.id == PChar->id)
+        if (PCurrentMob->m_OwnerID.UniqueNo == PChar->id)
         {
             PCurrentMob->m_OwnerID.clean();
             PCurrentMob->updatemask |= UPDATE_STATUS;
         }
-        if (PCurrentMob->GetBattleTargetID() == PChar->targid)
+        if (PCurrentMob->battleTarget() == PChar)
         {
             PCurrentMob->setBattleTarget(std::nullopt);
         }
@@ -660,7 +659,7 @@ void CZoneEntities::AssignDynamicTargIDandLongID(CBaseEntity* PEntity)
     // We found our targid, the next dynamic entity will want to start searching at +1 of this.
     m_nextDynamicTargID = targid + 1;
 
-    auto id = 0x01000000 | (m_zone->GetID() << 0x0C) | (targid + 0x0100);
+    auto id = 0x01000000 | (static_cast<uint32>(m_zone->GetID()) << 0x0C) | (targid + 0x0100);
 
     m_dynamicTargIds.insert(targid);
 
@@ -1045,7 +1044,7 @@ void CZoneEntities::SpawnPCs(CCharEntity* PChar)
     TracyZoneScoped;
 
     // TODO: This is a temporary fix so that Feretory and Mog Garden _seem_ like a solo zones.
-    if (PChar->loc.zone->GetID() == ZONE_FERETORY || PChar->loc.zone->GetID() == ZONE_MOG_GARDEN)
+    if (PChar->loc.zone->GetID() == xi::ZoneId::Feretory || PChar->loc.zone->GetID() == xi::ZoneId::MogGarden)
     {
         return;
     }
@@ -2110,7 +2109,7 @@ auto CZoneEntities::ZoneServer(timer::time_point tick) -> Task<void>
                 }
             }
         }
-        else if (PChar->loc.destination != 0xFFFF)
+        else if (PChar->loc.destination != ZONE_NO_DESTINATION)
         {
             const bool ready = co_await zoneutils::IsZoneReady(scheduler_, config_, PChar->loc.destination);
             if (ready)
@@ -2154,39 +2153,8 @@ auto CZoneEntities::ZoneServer(timer::time_point tick) -> Task<void>
         m_EffectCheckTime = m_EffectCheckTime + 3s > tick ? m_EffectCheckTime + 3s : tick + 3s;
     }
 
-    if (tick > m_charPersistTime && !m_charTargIds.empty())
-    {
-        m_charPersistTime = tick + 1s;
-
-        std::set<uint16>::iterator charTargIdIter = m_charTargIds.lower_bound(m_lastCharPersistTargId);
-        if (charTargIdIter == m_charTargIds.end())
-        {
-            charTargIdIter = m_charTargIds.begin();
-        }
-
-        size_t maxChecks = std::min<size_t>(m_charTargIds.size(), PERSIST_CHECK_CHARACTERS);
-
-        for (size_t i = 0; i < maxChecks; i++)
-        {
-            CCharEntity* PChar = static_cast<CCharEntity*>(m_charList[*charTargIdIter]);
-            ++charTargIdIter;
-            if (charTargIdIter == m_charTargIds.end())
-            {
-                charTargIdIter = m_charTargIds.begin();
-            }
-
-            if (PChar && PChar->PersistData(tick))
-            {
-                // We only want to persist at most 1 character per zone tick
-                break;
-            }
-        }
-        m_lastCharPersistTargId = *charTargIdIter;
-    }
-
     if (tick > m_computeTime && !m_charTargIds.empty())
     {
-        // Tick time is irregular to avoid consistently happening at the same time as char persistence
         m_computeTime = tick + 567ms;
 
         std::set<uint16>::iterator charTargIdIter = m_charTargIds.lower_bound(m_lastCharComputeTargId);

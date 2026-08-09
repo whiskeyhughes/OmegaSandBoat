@@ -89,7 +89,7 @@ CZone* CBattlefield::GetZone() const
     return m_Zone;
 }
 
-uint16 CBattlefield::GetZoneID() const
+auto CBattlefield::GetZoneID() const -> xi::ZoneId
 {
     return m_Zone->GetID();
 }
@@ -284,6 +284,8 @@ void CBattlefield::ApplyLevelRestrictions(CCharEntity* PChar) const
 
         PChar->StatusEffectContainer->DelStatusEffectsByFlag(xi::StatusEffectFlag::Dispelable, EffectNotice::Silent);
         PChar->StatusEffectContainer->DelStatusEffectSilent(xi::StatusEffect::Reraise);
+        PChar->health.tp = 0;
+        PChar->updatemask |= UPDATE_HP;
         PChar->StatusEffectContainer->AddStatusEffect(xi::StatusEffect::LevelRestriction, static_cast<uint16>(xi::StatusEffect::LevelRestriction), cap, 0s, 0s);
     }
     else
@@ -884,7 +886,7 @@ bool CBattlefield::CheckInProgress()
     ForEachEnemy([&](const CMobEntity* PMob)
                  {
                      // Any entry in enmity list or currently chasing someone
-                     if (!PMob->PEnmityContainer->GetEnmityList()->empty() || PMob->GetBattleTargetID())
+                     if (!PMob->PEnmityContainer->GetEnmityList()->empty() || PMob->battleTarget().isSet())
                      {
                          if (m_Status == BATTLEFIELD_STATUS_OPEN)
                          {

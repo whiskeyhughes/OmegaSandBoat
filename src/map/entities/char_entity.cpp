@@ -333,7 +333,7 @@ CCharEntity::~CCharEntity()
         StatusEffectContainer->DelStatusEffectSilent(xi::StatusEffect::LevelRestriction);
     }
 
-    if (PParty && loc.destination != 0 && !inMogHouse())
+    if (PParty && loc.destination != xi::ZoneId::Unknown && !inMogHouse())
     {
         if (PParty->m_PAlliance)
         {
@@ -1071,71 +1071,32 @@ void CCharEntity::ClearTrusts()
     ReloadPartyInc();
 }
 
-void CCharEntity::RequestPersist(CHAR_PERSIST toPersist)
+auto CCharEntity::persist() const -> CharPersist
 {
-    dataToPersist |= toPersist;
+    return persist_;
 }
 
-bool CCharEntity::PersistData()
+void CCharEntity::setPersist(CharPersist toPersist)
 {
-    bool didPersist = false;
-
-    if (!charVarChanges.empty())
-    {
-        for (auto&& charVarName : charVarChanges)
-        {
-            charutils::PersistCharVar(this->id, charVarName.c_str(), charVarCache[charVarName].first, charVarCache[charVarName].second);
-        }
-
-        charVarChanges.clear();
-        didPersist = true;
-    }
-
-    if (!dataToPersist)
-    {
-        return didPersist;
-    }
-    else
-    {
-        didPersist = true;
-    }
-
-    if (dataToPersist & CHAR_PERSIST::EQUIP)
-    {
-        charutils::SaveCharEquip(this);
-        charutils::SaveCharLook(this);
-    }
-
-    if (dataToPersist & CHAR_PERSIST::POSITION)
-    {
-        charutils::SaveCharPosition(this);
-    }
-
-    if (dataToPersist & CHAR_PERSIST::EFFECTS)
-    {
-        StatusEffectContainer->SaveStatusEffects(true);
-    }
-
-    /* TODO
-    if (dataToPersist & CHAR_PERSIST::LINKSHELL)
-    {
-        charutils::SaveCharLinkshells(this);
-    }
-    */
-
-    dataToPersist = 0;
-    return didPersist;
+    persist_ |= toPersist;
 }
 
-bool CCharEntity::PersistData(timer::time_point tick)
+void CCharEntity::clearPersist(CharPersist toPersist)
 {
-    if (tick < nextDataPersistTime || !PersistData())
+    persist_ &= ~toPersist;
+}
+
+void CCharEntity::takeCharVarChanges(std::vector<CharVarChange>& out)
+{
+    out.reserve(out.size() + charVarChanges.size());
+
+    for (const auto& charVarName : charVarChanges)
     {
-        return false;
+        const auto& cached = charVarCache[charVarName];
+        out.push_back({ id, charVarName, cached.first, cached.second });
     }
 
-    nextDataPersistTime = tick + TIME_BETWEEN_PERSIST;
-    return true;
+    charVarChanges.clear();
 }
 
 auto CCharEntity::Tick(timer::time_point tick) -> Task<void>
@@ -2096,7 +2057,7 @@ bool CCharEntity::IsMobOwner(CBattleEntity* PBattleTarget)
         return false;
     }
 
-    if (PBattleTarget->m_OwnerID.id == 0 || PBattleTarget->m_OwnerID.id == this->id || PBattleTarget->objtype == TYPE_PC)
+    if (PBattleTarget->m_OwnerID.UniqueNo == 0 || PBattleTarget->m_OwnerID.UniqueNo == this->id || PBattleTarget->objtype == TYPE_PC)
     {
         return true;
     }
@@ -2114,7 +2075,7 @@ bool CCharEntity::IsMobOwner(CBattleEntity* PBattleTarget)
     // clang-format off
     ForAlliance([&PBattleTarget, &found](CBattleEntity* PEntity)
     {
-        if (PEntity->id == PBattleTarget->m_OwnerID.id)
+        if (PEntity->id == PBattleTarget->m_OwnerID.UniqueNo)
         {
             found = true;
         }
@@ -3033,6 +2994,10 @@ void CCharEntity::tryStartNextEvent()
 
     // Set hidden status based on event data
     m_isPCHidden = currentEvent->isHidden;
+    if (m_isPCHidden)
+    {
+        updatemask |= UPDATE_HP;
+    }
 
     if (currentEvent->strings.empty())
     {

@@ -44,7 +44,7 @@ class CZone;
 // Exposed globals
 //
 
-extern std::map<uint16, CZone*> g_PZoneList; // Global array of pointers for zones
+extern std::map<xi::ZoneId, CZone*> g_PZoneList; // Global array of pointers for zones
 
 class MapEngine final : public Engine
 {
@@ -68,6 +68,8 @@ public:
     void sessionCleanup() const;
     void garbageCollect() const;
 
+    auto persistSweep() -> Task<void>;
+
     //
     // Commands callbacks
     //
@@ -84,7 +86,7 @@ public:
     auto networking() const -> MapNetworking&;
     auto statistics() const -> MapStatistics&;
     auto scheduler() -> Scheduler&;
-    auto zones() const -> std::map<uint16, CZone*>&; // g_PZoneList
+    auto zones() const -> std::map<xi::ZoneId, CZone*>&; // g_PZoneList
     auto config() const -> MapConfig&;
     // TODO: gameState()
 
@@ -98,6 +100,7 @@ private:
     Maybe<Scheduler::Token> persistVolatileServerVarsToken_;
     Maybe<Scheduler::Token> pumpIPCToken_;
     Maybe<Scheduler::Token> flushStatisticsToken_;
+    Maybe<Scheduler::Token> persistSweepToken_;
 
     std::unique_ptr<MapStatistics> mapStatistics_;
     std::unique_ptr<MapNetworking> networking_;
